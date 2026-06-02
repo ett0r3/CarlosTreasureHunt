@@ -15,6 +15,8 @@ struct ContentView: View {
 
             ZStack {
 
+                // Background
+
                 LinearGradient(
                     colors: [
 
@@ -36,6 +38,7 @@ struct ContentView: View {
                 )
                 .ignoresSafeArea()
 
+                // Home image
 
                 Image("home")
                     .resizable()
@@ -47,6 +50,7 @@ struct ContentView: View {
                     .clipped()
                     .ignoresSafeArea()
 
+                // Clickable lens
 
                 NavigationLink(destination: SecondView()) {
 
@@ -61,12 +65,11 @@ struct ContentView: View {
                         Text("GIOCA")
                             .font(.system(size: 42))
                             .bold()
-                            .foregroundStyle(Color.white)
+                            .foregroundStyle(.white)
                             .offset(x: -10, y: -20)
-                        
-                    }// END ZStack
+                    }
                 }
-            }// END ZStack
+            }
         }
     }
 }
