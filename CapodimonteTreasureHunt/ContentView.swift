@@ -74,21 +74,21 @@ struct ContentView: View {
                 }
                 .buttonStyle(.plain)
             }
-        }
-        .navigationDestination(for: GameRoute.self) { route in
-            switch route {
-            case .intro:
-                OnboardingView()
-            case .target(let artworkID):
-                TargetDetailView(artworkID: artworkID)
-            case .scanner(let artworkID):
-                ARScannerView(artworkID: artworkID)
-            case .scanSuccess(let artworkID):
-                ScanSuccessView(artworkID: artworkID)
-            case .gallery:
-                SessionGalleryView()
-            case .completion:
-                CompletionView()
+            .navigationDestination(for: GameRoute.self) { route in
+                switch route {
+                case .intro:
+                    OnboardingView()
+                case .target(let artworkID):
+                    TargetDetailView(artworkID: artworkID)
+                case .scanner(let artworkID):
+                    ARScannerView(artworkID: artworkID)
+                case .scanSuccess(let artworkID):
+                    ScanSuccessView(artworkID: artworkID)
+                case .gallery:
+                    SessionGalleryView()
+                case .completion:
+                    CompletionView()
+                }
             }
         }
     }
