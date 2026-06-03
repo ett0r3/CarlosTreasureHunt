@@ -7,13 +7,29 @@ import Combine
 import Foundation
 
 final class GameStore: ObservableObject {
+    private enum PersistenceKey {
+        static let playerName = "game.playerName"
+        static let unlockedArtworkIDs = "game.unlockedArtworkIDs"
+    }
+
     @Published var path: [GameRoute] = []
-    @Published var playerName: String = ""
+    @Published var playerName: String = "" {
+        didSet {
+            UserDefaults.standard.set(playerName, forKey: PersistenceKey.playerName)
+        }
+    }
     @Published private(set) var artworks: [ArtworkTarget]
-    @Published private(set) var unlockedArtworkIDs: Set<UUID> = []
+    @Published private(set) var unlockedArtworkIDs: Set<UUID> = [] {
+        didSet {
+            saveUnlockedArtworkIDs()
+        }
+    }
 
     init(artworks: [ArtworkTarget] = ArtworkTarget.capodimonteSessionDemo) {
         self.artworks = Array(artworks.sorted { $0.order < $1.order }.prefix(5))
+        self.playerName = UserDefaults.standard.string(forKey: PersistenceKey.playerName) ?? ""
+        self.unlockedArtworkIDs = Self.loadUnlockedArtworkIDs()
+            .intersection(Set(self.artworks.map(\.id)))
     }
 
     var completedCount: Int {
@@ -101,6 +117,18 @@ final class GameStore: ObservableObject {
     func restart() {
         playerName = ""
         unlockedArtworkIDs.removeAll()
+        UserDefaults.standard.removeObject(forKey: PersistenceKey.playerName)
+        UserDefaults.standard.removeObject(forKey: PersistenceKey.unlockedArtworkIDs)
         path = []
+    }
+
+    private func saveUnlockedArtworkIDs() {
+        let storedIDs = unlockedArtworkIDs.map(\.uuidString)
+        UserDefaults.standard.set(storedIDs, forKey: PersistenceKey.unlockedArtworkIDs)
+    }
+
+    private static func loadUnlockedArtworkIDs() -> Set<UUID> {
+        let storedIDs = UserDefaults.standard.stringArray(forKey: PersistenceKey.unlockedArtworkIDs) ?? []
+        return Set(storedIDs.compactMap(UUID.init(uuidString:)))
     }
 }
