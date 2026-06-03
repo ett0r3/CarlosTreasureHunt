@@ -8,10 +8,11 @@
 import SwiftUI
 
 struct ContentView: View {
+    @EnvironmentObject private var game: GameStore
 
     var body: some View {
 
-        NavigationStack {
+        NavigationStack(path: $game.path) {
 
             ZStack {
 
@@ -52,7 +53,9 @@ struct ContentView: View {
 
                 // Clickable lens
 
-                NavigationLink(destination: SecondView()) {
+                Button {
+                    game.startHunt()
+                } label: {
 
                     ZStack {
 
@@ -69,11 +72,31 @@ struct ContentView: View {
                             .offset(x: -10, y: -20)
                     }
                 }
+                .buttonStyle(.plain)
+            }
+        }
+        .navigationDestination(for: GameRoute.self) { route in
+            switch route {
+            case .intro:
+                OnboardingView()
+            case .target(let artworkID):
+                TargetDetailView(artworkID: artworkID)
+            case .scanner(let artworkID):
+                ARScannerView(artworkID: artworkID)
+            case .scanSuccess(let artworkID):
+                ScanSuccessView(artworkID: artworkID)
+            case .gallery:
+                SessionGalleryView()
+            case .completion:
+                CompletionView()
             }
         }
     }
 }
 
-#Preview {
-    ContentView()
+struct ContentView_Previews: PreviewProvider {
+    static var previews: some View {
+        ContentView()
+            .environmentObject(GameStore())
+    }
 }

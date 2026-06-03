@@ -10,18 +10,13 @@ import SwiftUI
 struct SecondView: View {
 
     var body: some View {
-
-        ZStack {
-
-            Color.white
-                .ignoresSafeArea()
-
-            Text("Second View")
-                .font(.largeTitle)
-        }
+        OnboardingView()
     }
 }
 
-#Preview {
-    SecondView()
+struct SecondView_Previews: PreviewProvider {
+    static var previews: some View {
+        SecondView()
+            .environmentObject(GameStore())
+    }
 }
