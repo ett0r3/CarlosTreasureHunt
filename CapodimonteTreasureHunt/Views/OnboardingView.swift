@@ -33,8 +33,6 @@ struct OnboardingView: View {
                     }
                 }
 
-                PhraseProgressView(slots: game.phraseSlots)
-
                 Spacer()
 
                 PrimaryButton(title: buttonTitle, systemImage: "arrow.right") {
@@ -50,16 +48,16 @@ struct OnboardingView: View {
     private var currentNarration: String {
         switch pageIndex {
         case 0:
-            return "C'e un libro vuoto nella galleria. Per riempirlo dovrai trovare 5 dettagli nascosti nei quadri."
+            return "La galleria contiene 6 missioni. Ogni missione e una collezione da 5 quadri da scoprire."
         case 1:
             return "Prima pero devo sapere chi guidera la missione. Scrivi il tuo nome: lo usero quando ti parlero durante l'avventura."
         default:
-            return "\(game.displayName), ogni dettaglio sblocca un quadro e una parola. Alla fine le 5 parole formeranno la frase segreta."
+            return "\(game.displayName), scegli una missione, trova i dettagli e ricostruisci la frase segreta solo mentre giochi."
         }
     }
 
     private var buttonTitle: String {
-        pageIndex < 2 ? "Continua" : "Vai al primo target"
+        pageIndex < 2 ? "Continua" : "Apri galleria"
     }
 
     private func advance() {

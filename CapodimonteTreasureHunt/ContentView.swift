@@ -78,16 +78,20 @@ struct ContentView: View {
                 switch route {
                 case .intro:
                     OnboardingView()
+                case .gallery:
+                    MissionGalleryView()
+                case .mission(let missionID):
+                    MissionDetailView(missionID: missionID)
                 case .target(let artworkID):
                     TargetDetailView(artworkID: artworkID)
                 case .scanner(let artworkID):
                     ARScannerView(artworkID: artworkID)
-                case .scanSuccess(let artworkID):
-                    ScanSuccessView(artworkID: artworkID)
-                case .gallery:
-                    SessionGalleryView()
-                case .completion:
-                    CompletionView()
+                case .wordReveal(let artworkID):
+                    WordRevealView(artworkID: artworkID)
+                case .artworkReveal(let artworkID):
+                    ArtworkRevealView(artworkID: artworkID)
+                case .completion(let missionID):
+                    CompletionView(missionID: missionID)
                 }
             }
         }

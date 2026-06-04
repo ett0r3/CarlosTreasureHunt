@@ -9,7 +9,7 @@ import Foundation
 final class GameStore: ObservableObject {
     private enum PersistenceKey {
         static let playerName = "game.playerName"
-        static let unlockedArtworkIDs = "game.unlockedArtworkIDs"
+        static let missionProgress = "game.missionProgress"
     }
 
     @Published var path: [GameRoute] = []
@@ -18,26 +18,20 @@ final class GameStore: ObservableObject {
             UserDefaults.standard.set(playerName, forKey: PersistenceKey.playerName)
         }
     }
-    @Published private(set) var artworks: [ArtworkTarget]
-    @Published private(set) var unlockedArtworkIDs: Set<UUID> = [] {
+
+    @Published private(set) var missions: [MissionCollection]
+    @Published private(set) var activeMissionID: UUID?
+    @Published private(set) var progressByMissionID: [UUID: MissionProgress] = [:] {
         didSet {
-            saveUnlockedArtworkIDs()
+            saveMissionProgress()
         }
     }
 
-    init(artworks: [ArtworkTarget] = ArtworkTarget.capodimonteSessionDemo) {
-        self.artworks = Array(artworks.sorted { $0.order < $1.order }.prefix(5))
+    init(missions: [MissionCollection] = MissionCollection.capodimonteDemo) {
+        self.missions = missions
         self.playerName = UserDefaults.standard.string(forKey: PersistenceKey.playerName) ?? ""
-        self.unlockedArtworkIDs = Self.loadUnlockedArtworkIDs()
-            .intersection(Set(self.artworks.map(\.id)))
-    }
-
-    var completedCount: Int {
-        unlockedArtworkIDs.count
-    }
-
-    var progressText: String {
-        "\(completedCount)/\(artworks.count)"
+        self.progressByMissionID = Self.loadMissionProgress()
+        normalizeMissionProgress()
     }
 
     var displayName: String {
@@ -45,24 +39,12 @@ final class GameStore: ObservableObject {
         return trimmedName.isEmpty ? "esploratore" : trimmedName
     }
 
-    var currentArtwork: ArtworkTarget? {
-        artworks.first { !unlockedArtworkIDs.contains($0.id) } ?? artworks.last
-    }
+    var activeMission: MissionCollection? {
+        guard let activeMissionID else {
+            return nil
+        }
 
-    var unlockedArtworks: [ArtworkTarget] {
-        artworks.filter { unlockedArtworkIDs.contains($0.id) }
-    }
-
-    var unlockedWords: [String] {
-        artworks.map { unlockedArtworkIDs.contains($0.id) ? $0.unlockedWord : "" }
-    }
-
-    var phraseSlots: [String?] {
-        artworks.map { unlockedArtworkIDs.contains($0.id) ? $0.unlockedWord : nil }
-    }
-
-    var completedPhrase: String {
-        artworks.map(\.unlockedWord).joined(separator: " ")
+        return mission(with: activeMissionID)
     }
 
     func startHunt() {
@@ -70,65 +52,206 @@ final class GameStore: ObservableObject {
     }
 
     func finishIntro() {
-        if let currentArtwork {
-            path.append(.target(currentArtwork.id))
-        }
-    }
-
-    func openCurrentTarget() {
-        if let currentArtwork {
-            path.append(.target(currentArtwork.id))
-        }
-    }
-
-    func openTarget(_ artwork: ArtworkTarget) {
-        path.append(.target(artwork.id))
-    }
-
-    func openScanner(for artwork: ArtworkTarget) {
-        path.append(.scanner(artwork.id))
+        openGallery()
     }
 
     func openGallery() {
         path.append(.gallery)
     }
 
+    func openMission(_ mission: MissionCollection) {
+        activeMissionID = mission.id
+        path.append(.mission(mission.id))
+    }
+
+    func openCurrentTarget(in mission: MissionCollection? = nil) {
+        let selectedMission = mission ?? activeMission ?? missions.first
+
+        if let selectedMission, let currentArtwork = currentArtwork(in: selectedMission) {
+            openTarget(currentArtwork)
+        }
+    }
+
+    func openTarget(_ artwork: ArtworkTarget) {
+        activeMissionID = mission(containing: artwork.id)?.id
+        path.append(.target(artwork.id))
+    }
+
+    func openScanner(for artwork: ArtworkTarget) {
+        activeMissionID = mission(containing: artwork.id)?.id
+        path.append(.scanner(artwork.id))
+    }
+
+    func continueAfterWordReveal(for artwork: ArtworkTarget) {
+        path = [.artworkReveal(artwork.id)]
+    }
+
+    func continueAfterArtworkReveal(for artwork: ArtworkTarget) {
+        guard let mission = mission(containing: artwork.id) else {
+            openGallery()
+            return
+        }
+
+        activeMissionID = mission.id
+
+        if isMissionCompleted(mission) {
+            path = [.completion(mission.id)]
+        } else {
+            path = [.mission(mission.id)]
+        }
+    }
+
+    func mission(with id: UUID) -> MissionCollection? {
+        missions.first { $0.id == id }
+    }
+
     func artwork(with id: UUID) -> ArtworkTarget? {
-        artworks.first { $0.id == id }
+        missions.lazy.flatMap(\.artworks).first { $0.id == id }
+    }
+
+    func mission(containing artworkID: UUID) -> MissionCollection? {
+        missions.first { mission in
+            mission.artworks.contains { $0.id == artworkID }
+        }
     }
 
     func isUnlocked(_ artwork: ArtworkTarget) -> Bool {
-        unlockedArtworkIDs.contains(artwork.id)
+        guard let mission = mission(containing: artwork.id) else {
+            return false
+        }
+
+        return progress(for: mission).unlockedArtworkIDs.contains(artwork.id)
+    }
+
+    func completedCount(for mission: MissionCollection) -> Int {
+        progress(for: mission).unlockedArtworkIDs.count
+    }
+
+    func progressText(for mission: MissionCollection) -> String {
+        "\(completedCount(for: mission))/\(mission.artworks.count)"
+    }
+
+    func isMissionCompleted(_ mission: MissionCollection) -> Bool {
+        completedCount(for: mission) == mission.artworks.count
+    }
+
+    func currentArtwork(in mission: MissionCollection) -> ArtworkTarget? {
+        let unlockedArtworkIDs = progress(for: mission).unlockedArtworkIDs
+        return mission.artworks.first { !unlockedArtworkIDs.contains($0.id) } ?? mission.artworks.last
+    }
+
+    func phraseSlots(for mission: MissionCollection) -> [String?] {
+        let unlockedIndices = progress(for: mission).unlockedPhraseSlotIndices
+
+        return mission.artworks.indices.map { index in
+            unlockedIndices.contains(index) ? mission.artworks[index].unlockedWord : nil
+        }
     }
 
     func completeScan(for artwork: ArtworkTarget) {
-        unlockedArtworkIDs.insert(artwork.id)
-        path = [.scanSuccess(artwork.id)]
-    }
-
-    func continueAfterSuccess() {
-        if unlockedArtworkIDs.count == artworks.count {
-            path = [.completion]
-        } else {
-            openCurrentTarget()
+        guard let mission = mission(containing: artwork.id) else {
+            return
         }
+
+        activeMissionID = mission.id
+        var progress = progress(for: mission)
+        let wasAlreadyUnlocked = progress.unlockedArtworkIDs.contains(artwork.id)
+        progress.unlockedArtworkIDs.insert(artwork.id)
+
+        if !wasAlreadyUnlocked {
+            let lockedIndices = Set(mission.artworks.indices).subtracting(progress.unlockedPhraseSlotIndices)
+
+            if let randomIndex = lockedIndices.randomElement() {
+                progress.unlockedPhraseSlotIndices.insert(randomIndex)
+            }
+        }
+
+        progressByMissionID[mission.id] = progress
+        path = [.wordReveal(artwork.id)]
     }
 
     func restart() {
         playerName = ""
-        unlockedArtworkIDs.removeAll()
+        activeMissionID = nil
+        progressByMissionID.removeAll()
         UserDefaults.standard.removeObject(forKey: PersistenceKey.playerName)
-        UserDefaults.standard.removeObject(forKey: PersistenceKey.unlockedArtworkIDs)
+        UserDefaults.standard.removeObject(forKey: PersistenceKey.missionProgress)
         path = []
     }
 
-    private func saveUnlockedArtworkIDs() {
-        let storedIDs = unlockedArtworkIDs.map(\.uuidString)
-        UserDefaults.standard.set(storedIDs, forKey: PersistenceKey.unlockedArtworkIDs)
+    private func progress(for mission: MissionCollection) -> MissionProgress {
+        progressByMissionID[mission.id] ?? MissionProgress()
     }
 
-    private static func loadUnlockedArtworkIDs() -> Set<UUID> {
-        let storedIDs = UserDefaults.standard.stringArray(forKey: PersistenceKey.unlockedArtworkIDs) ?? []
-        return Set(storedIDs.compactMap(UUID.init(uuidString:)))
+    private func normalizeMissionProgress() {
+        let validMissionIDs = Set(missions.map(\.id))
+        progressByMissionID = progressByMissionID.filter { validMissionIDs.contains($0.key) }
+
+        for mission in missions {
+            guard var progress = progressByMissionID[mission.id] else {
+                continue
+            }
+
+            let validArtworkIDs = Set(mission.artworks.map(\.id))
+            progress.unlockedArtworkIDs = progress.unlockedArtworkIDs.intersection(validArtworkIDs)
+            progress.unlockedPhraseSlotIndices = progress.unlockedPhraseSlotIndices.intersection(Set(mission.artworks.indices))
+
+            while progress.unlockedPhraseSlotIndices.count < progress.unlockedArtworkIDs.count {
+                let lockedIndices = Set(mission.artworks.indices).subtracting(progress.unlockedPhraseSlotIndices)
+
+                if let randomIndex = lockedIndices.randomElement() {
+                    progress.unlockedPhraseSlotIndices.insert(randomIndex)
+                } else {
+                    break
+                }
+            }
+
+            progressByMissionID[mission.id] = progress
+        }
     }
+
+    private func saveMissionProgress() {
+        let storedProgress = progressByMissionID.map { missionID, progress in
+            StoredMissionProgress(
+                missionID: missionID.uuidString,
+                unlockedArtworkIDs: progress.unlockedArtworkIDs.map(\.uuidString),
+                unlockedPhraseSlotIndices: progress.unlockedPhraseSlotIndices.sorted()
+            )
+        }
+
+        if let data = try? JSONEncoder().encode(storedProgress) {
+            UserDefaults.standard.set(data, forKey: PersistenceKey.missionProgress)
+        }
+    }
+
+    private static func loadMissionProgress() -> [UUID: MissionProgress] {
+        guard
+            let data = UserDefaults.standard.data(forKey: PersistenceKey.missionProgress),
+            let storedProgress = try? JSONDecoder().decode([StoredMissionProgress].self, from: data)
+        else {
+            return [:]
+        }
+
+        return storedProgress.reduce(into: [:]) { result, storedProgress in
+            guard let missionID = UUID(uuidString: storedProgress.missionID) else {
+                return
+            }
+
+            result[missionID] = MissionProgress(
+                unlockedArtworkIDs: Set(storedProgress.unlockedArtworkIDs.compactMap(UUID.init(uuidString:))),
+                unlockedPhraseSlotIndices: Set(storedProgress.unlockedPhraseSlotIndices)
+            )
+        }
+    }
+}
+
+struct MissionProgress: Equatable {
+    var unlockedArtworkIDs: Set<UUID> = []
+    var unlockedPhraseSlotIndices: Set<Int> = []
+}
+
+private struct StoredMissionProgress: Codable {
+    let missionID: String
+    let unlockedArtworkIDs: [String]
+    let unlockedPhraseSlotIndices: [Int]
 }

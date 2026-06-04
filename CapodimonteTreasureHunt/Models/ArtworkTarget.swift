@@ -10,6 +10,7 @@ struct ArtworkTarget: Identifiable, Hashable {
     let title: String
     let artist: String
     let galleryName: String
+    let artworkDescription: String
     let targetTitle: String
     let targetDescription: String
     let narratorPrompt: String
@@ -22,75 +23,83 @@ struct ArtworkTarget: Identifiable, Hashable {
 
 extension ArtworkTarget {
     static let capodimonteSessionDemo: [ArtworkTarget] = [
-        ArtworkTarget(
-            id: UUID(uuidString: "11111111-1111-1111-1111-111111111111")!,
-            title: "Ritratto misterioso",
-            artist: "Capodimonte",
-            galleryName: "Libro 1",
-            targetTitle: "Dettaglio dello sguardo",
-            targetDescription: "Punta la fotocamera sul dettaglio indicato: quando il modello lo riconosce, il quadro entra nella tua galleria.",
-            narratorPrompt: "Il primo segno e negli occhi. Avvicinati con calma e lascia che il dettaglio ti risponda.",
-            unlockedWord: "L'arte",
-            order: 1,
-            imageAssetName: nil,
-            targetAssetName: nil,
-            coreMLLabel: "portrait_eye_detail"
+        MissionCollection.capodimonteDemo[0].artworks
+    ].flatMap { $0 }
+}
+
+extension MissionCollection {
+    static let capodimonteDemo: [MissionCollection] = [
+        demoMission(
+            idNumber: 1,
+            title: "Missione 1",
+            summary: "Cinque dettagli per imparare a guardare un'opera come un esploratore.",
+            words: ["L'arte", "rivela", "segreti", "a", "te"]
         ),
-        ArtworkTarget(
-            id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
-            title: "Il colore nascosto",
-            artist: "Capodimonte",
-            galleryName: "Libro 1",
-            targetTitle: "Dettaglio del colore",
-            targetDescription: "Cerca la pennellata giusta nel quadro e tienila al centro dell'inquadratura.",
-            narratorPrompt: "Ogni colore ha una voce. Questa volta devi trovare quella piu silenziosa.",
-            unlockedWord: "rivela",
-            order: 2,
-            imageAssetName: nil,
-            targetAssetName: nil,
-            coreMLLabel: "hidden_color_detail"
+        demoMission(
+            idNumber: 2,
+            title: "Missione 2",
+            summary: "Una collezione dedicata alla luce, ai passaggi e ai piccoli segnali.",
+            words: ["Ogni", "quadro", "nasconde", "una", "luce"]
         ),
-        ArtworkTarget(
-            id: UUID(uuidString: "33333333-3333-3333-3333-333333333333")!,
-            title: "La mano del pittore",
-            artist: "Capodimonte",
-            galleryName: "Libro 1",
-            targetTitle: "Dettaglio della mano",
-            targetDescription: "Osserva la posizione della mano e cerca la stessa forma davanti a te.",
-            narratorPrompt: "Una mano puo indicare, proteggere o nascondere. Qui fa tutte e tre le cose.",
-            unlockedWord: "segreti",
-            order: 3,
-            imageAssetName: nil,
-            targetAssetName: nil,
-            coreMLLabel: "painter_hand_detail"
+        demoMission(
+            idNumber: 3,
+            title: "Missione 3",
+            summary: "Un percorso tra gesti, sguardi e indizi lasciati nelle figure.",
+            words: ["Guarda", "bene", "troverai", "la", "chiave"]
         ),
-        ArtworkTarget(
-            id: UUID(uuidString: "44444444-4444-4444-4444-444444444444")!,
-            title: "La luce sulla veste",
-            artist: "Capodimonte",
-            galleryName: "Libro 1",
-            targetTitle: "Dettaglio della luce",
-            targetDescription: "Trova il punto in cui la luce cambia il colore della veste.",
-            narratorPrompt: "La luce non illumina soltanto: a volte lascia una parola per chi sa seguirla.",
-            unlockedWord: "a",
-            order: 4,
-            imageAssetName: nil,
-            targetAssetName: nil,
-            coreMLLabel: "robe_light_detail"
+        demoMission(
+            idNumber: 4,
+            title: "Missione 4",
+            summary: "Cinque opere per scoprire come i dettagli cambiano una storia.",
+            words: ["I", "dettagli", "aprono", "nuove", "storie"]
         ),
-        ArtworkTarget(
-            id: UUID(uuidString: "55555555-5555-5555-5555-555555555555")!,
-            title: "Il simbolo finale",
-            artist: "Capodimonte",
-            galleryName: "Libro 1",
-            targetTitle: "Dettaglio del simbolo",
-            targetDescription: "Questo e l'ultimo dettaglio: scansionarlo completa la frase della sessione.",
-            narratorPrompt: "Se sei arrivato fin qui, sai gia guardare come un esploratore del museo.",
-            unlockedWord: "te",
-            order: 5,
-            imageAssetName: nil,
-            targetAssetName: nil,
-            coreMLLabel: "final_symbol_detail"
+        demoMission(
+            idNumber: 5,
+            title: "Missione 5",
+            summary: "Una caccia visiva fatta di colori, simboli e tracce nascoste.",
+            words: ["Segui", "il", "colore", "senza", "fretta"]
+        ),
+        demoMission(
+            idNumber: 6,
+            title: "Missione 6",
+            summary: "La collezione finale collega tutte le scoperte del museo.",
+            words: ["Capodimonte", "custodisce", "tesori", "per", "tutti"]
         )
     ]
+
+    private static func demoMission(
+        idNumber: Int,
+        title: String,
+        summary: String,
+        words: [String]
+    ) -> MissionCollection {
+        MissionCollection(
+            id: demoUUID(idNumber * 1000),
+            title: title,
+            summary: summary,
+            artworks: words.enumerated().map { index, word in
+                let order = index + 1
+
+                return ArtworkTarget(
+                    id: demoUUID(idNumber * 100 + order),
+                    title: "Opera \(order)",
+                    artist: "Capodimonte",
+                    galleryName: title,
+                    artworkDescription: "Opera placeholder della \(title.lowercased()). Quando avrai i contenuti reali, qui andra la descrizione completa del quadro sbloccato.",
+                    targetTitle: "Dettaglio \(order)",
+                    targetDescription: "Inquadra il dettaglio \(order) con la fotocamera per sbloccare il quadro e una parola della frase.",
+                    narratorPrompt: "Cerca il dettaglio \(order): e il prossimo passo della collezione.",
+                    unlockedWord: word,
+                    order: order,
+                    imageAssetName: nil,
+                    targetAssetName: nil,
+                    coreMLLabel: "mission_\(idNumber)_detail_\(order)"
+                )
+            }
+        )
+    }
+
+    private static func demoUUID(_ number: Int) -> UUID {
+        UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", number))!
+    }
 }

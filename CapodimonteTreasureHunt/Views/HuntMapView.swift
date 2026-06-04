@@ -6,14 +6,12 @@
 import SwiftUI
 
 struct HuntMapView: View {
-    @EnvironmentObject private var game: GameStore
-
     var body: some View {
-        SessionGalleryView()
+        MissionGalleryView()
     }
 }
 
-struct SessionGalleryView: View {
+struct MissionGalleryView: View {
     @EnvironmentObject private var game: GameStore
 
     var body: some View {
@@ -21,37 +19,25 @@ struct SessionGalleryView: View {
             GameBackground()
 
             VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Galleria")
-                            .font(.largeTitle.bold())
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Galleria")
+                        .font(.largeTitle.bold())
 
-                        Text("Quadri sbloccati: \(game.progressText)")
-                            .font(.headline)
-                    }
-
-                    Spacer()
-
-                    Image(systemName: "book.pages.fill")
-                        .font(.system(size: 34))
-                        .foregroundStyle(Color(red: 0.49, green: 0.19, blue: 0.62))
+                    Text("Scegli una delle 6 missioni.")
+                        .font(.headline)
                 }
                 .foregroundStyle(Color(red: 0.18, green: 0.12, blue: 0.23))
 
-                PhraseProgressView(slots: game.phraseSlots)
-
                 ScrollView {
                     LazyVStack(spacing: 12) {
-                        ForEach(game.artworks) { artwork in
+                        ForEach(game.missions) { mission in
                             Button {
-                                if game.isUnlocked(artwork) || artwork.id == game.currentArtwork?.id {
-                                    game.openTarget(artwork)
-                                }
+                                game.openMission(mission)
                             } label: {
-                                ArtworkRow(
-                                    artwork: artwork,
-                                    isUnlocked: game.isUnlocked(artwork),
-                                    isCurrent: artwork.id == game.currentArtwork?.id
+                                MissionRow(
+                                    mission: mission,
+                                    progressText: game.progressText(for: mission),
+                                    isCompleted: game.isMissionCompleted(mission)
                                 )
                             }
                             .buttonStyle(.plain)
@@ -59,14 +45,67 @@ struct SessionGalleryView: View {
                     }
                     .padding(.vertical, 4)
                 }
-
-                if game.completedCount < game.artworks.count {
-                    PrimaryButton(title: "Vai al prossimo target", systemImage: "viewfinder") {
-                        game.openCurrentTarget()
-                    }
-                }
             }
             .padding(20)
+        }
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+struct MissionDetailView: View {
+    @EnvironmentObject private var game: GameStore
+    let missionID: UUID
+
+    var body: some View {
+        ZStack {
+            GameBackground()
+
+            if let mission = game.mission(with: missionID) {
+                VStack(alignment: .leading, spacing: 18) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(mission.title)
+                            .font(.largeTitle.bold())
+
+                        Text("Quadri sbloccati: \(game.progressText(for: mission))")
+                            .font(.headline)
+                    }
+                    .foregroundStyle(Color(red: 0.18, green: 0.12, blue: 0.23))
+
+                    Text(mission.summary)
+                        .font(.body)
+                        .foregroundStyle(Color(red: 0.23, green: 0.21, blue: 0.25))
+
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(mission.artworks) { artwork in
+                                Button {
+                                    if game.isUnlocked(artwork) || artwork.id == game.currentArtwork(in: mission)?.id {
+                                        game.openTarget(artwork)
+                                    }
+                                } label: {
+                                    ArtworkRow(
+                                        artwork: artwork,
+                                        isUnlocked: game.isUnlocked(artwork),
+                                        isCurrent: artwork.id == game.currentArtwork(in: mission)?.id
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+
+                    if !game.isMissionCompleted(mission) {
+                        PrimaryButton(title: "Vai al prossimo target", systemImage: "viewfinder") {
+                            game.openCurrentTarget(in: mission)
+                        }
+                    }
+                }
+                .padding(20)
+            } else {
+                ContentUnavailableView("Missione non trovata", systemImage: "questionmark.circle")
+            }
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
@@ -87,6 +126,54 @@ struct PhraseProgressView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
         }
+    }
+}
+
+private struct MissionRow: View {
+    let mission: MissionCollection
+    let progressText: String
+    let isCompleted: Bool
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .fill(statusColor.opacity(0.16))
+                    .frame(width: 52, height: 52)
+
+                Image(systemName: isCompleted ? "checkmark" : "book.pages")
+                    .font(.title3.weight(.bold))
+                    .foregroundStyle(statusColor)
+            }
+
+            VStack(alignment: .leading, spacing: 5) {
+                Text(progressText)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(statusColor)
+
+                Text(mission.title)
+                    .font(.headline)
+                    .foregroundStyle(Color(red: 0.16, green: 0.13, blue: 0.18))
+
+                Text(mission.summary)
+                    .font(.subheadline)
+                    .lineLimit(2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Image(systemName: "chevron.right")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(14)
+        .background(.white.opacity(0.78))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var statusColor: Color {
+        isCompleted ? Color(red: 0.12, green: 0.47, blue: 0.34) : Color(red: 0.49, green: 0.19, blue: 0.62)
     }
 }
 
@@ -116,7 +203,7 @@ private struct ArtworkRow: View {
                     .font(.headline)
                     .foregroundStyle(Color(red: 0.16, green: 0.13, blue: 0.18))
 
-                Text(isUnlocked ? "Parola: \(artwork.unlockedWord)" : artwork.targetTitle)
+                Text(isUnlocked ? "Sbloccato" : artwork.targetTitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

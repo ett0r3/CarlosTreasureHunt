@@ -12,11 +12,13 @@ struct ARScannerView: View {
     @AppStorage("hasSeenScannerTutorial") private var hasSeenScannerTutorial = false
     @Namespace private var swapNamespace
     @State private var showsReferenceImage = false
+    @State private var isSwapBubbleDipped = false
     @State private var tutorialStep: ScannerTutorialStep = .lens
+    @State private var hasCompletedTutorialInCurrentSession = false
     let artworkID: UUID
 
     private var isShowingTutorial: Bool {
-        !hasSeenScannerTutorial
+        !hasCompletedTutorialInCurrentSession
     }
 
     var body: some View {
@@ -26,11 +28,11 @@ struct ARScannerView: View {
                     if showsReferenceImage {
                         ReferenceScannerSurface(artwork: artwork)
                             .matchedGeometryEffect(id: "scannerSurface", in: swapNamespace)
-                            .transition(.asymmetric(insertion: .scale(scale: 0.84).combined(with: .opacity), removal: .opacity))
+                            .transition(.opacity.combined(with: .scale(scale: 0.985)))
                     } else {
                         ARSceneView()
                             .matchedGeometryEffect(id: "scannerSurface", in: swapNamespace)
-                            .transition(.asymmetric(insertion: .scale(scale: 1.08).combined(with: .opacity), removal: .opacity))
+                            .transition(.opacity.combined(with: .scale(scale: 1.015)))
                     }
                 }
                 .ignoresSafeArea()
@@ -38,6 +40,7 @@ struct ARScannerView: View {
                 MagnifyingScannerOverlay(
                     artwork: artwork,
                     showsReferenceImage: showsReferenceImage,
+                    isSwapBubbleDipped: isSwapBubbleDipped,
                     namespace: swapNamespace
                 ) {
                     swapReferenceView()
@@ -57,7 +60,7 @@ struct ARScannerView: View {
                 Spacer()
 
                 if let artwork = game.artwork(with: artworkID) {
-                    PrimaryButton(title: "Simula target riconosciuto", systemImage: "checkmark.seal.fill") {
+                    ScannerActionButton(title: "Target riconosciuto", systemImage: "checkmark") {
                         game.completeScan(for: artwork)
                     }
                     .padding(20)
@@ -80,8 +83,36 @@ struct ARScannerView: View {
     }
 
     private func swapReferenceView() {
-        withAnimation(.interactiveSpring(response: 0.48, dampingFraction: 0.72, blendDuration: 0.08)) {
-            showsReferenceImage.toggle()
+        withAnimation(.easeInOut(duration: 0.16)) {
+            isSwapBubbleDipped = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            withAnimation(.easeInOut(duration: 0.28)) {
+                showsReferenceImage.toggle()
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.76)) {
+                isSwapBubbleDipped = false
+            }
+        }
+    }
+
+    private func openReferenceFromTutorial() {
+        if !showsReferenceImage {
+            swapReferenceView()
+        } else {
+            withAnimation(.easeInOut(duration: 0.16)) {
+                isSwapBubbleDipped = true
+            }
+
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.76)) {
+                    isSwapBubbleDipped = false
+                }
+            }
         }
     }
 
@@ -91,9 +122,32 @@ struct ARScannerView: View {
             case .lens:
                 tutorialStep = .swap
             case .swap:
-                hasSeenScannerTutorial = true
+                hasCompletedTutorialInCurrentSession = true
             }
         }
+    }
+}
+
+private struct ScannerActionButton: View {
+    let title: String
+    let systemImage: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.headline)
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(.white.opacity(0.28), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -108,11 +162,11 @@ private struct ScannerTutorialOverlay: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let lensSize = min(proxy.size.width * 0.78, proxy.size.height * 0.46)
-            let lensCenterY = proxy.size.height * 0.47
-            let swapSize: CGFloat = 82
-            let swapCenterY = lensCenterY + (lensSize / 2) - (swapSize * 0.18)
-            let focusSize = step == .lens ? lensSize + 26 : swapSize + 30
+            let lensSize = min(proxy.size.width * 0.92, proxy.size.height * 0.54)
+            let lensCenterY = proxy.size.height * 0.48
+            let swapSize: CGFloat = 86
+            let swapCenterY = lensCenterY + (lensSize / 2) - (swapSize * 0.2)
+            let focusSize = step == .lens ? lensSize + 18 : swapSize + 20
             let focusCenter = CGPoint(
                 x: proxy.size.width / 2,
                 y: step == .lens ? lensCenterY : swapCenterY
@@ -126,7 +180,7 @@ private struct ScannerTutorialOverlay: View {
             )
 
             ZStack {
-                Color.black.opacity(0.56)
+                Color.black.opacity(0.42)
                     .mask {
                         Rectangle()
                             .overlay {
@@ -141,13 +195,6 @@ private struct ScannerTutorialOverlay: View {
 
                 TutorialFocusRing(size: focusSize, step: step)
                     .position(focusCenter)
-                    .allowsHitTesting(false)
-
-                TutorialPointer(step: step)
-                    .position(
-                        x: proxy.size.width / 2,
-                        y: step == .lens ? lensCenterY + (lensSize / 2) + 28 : swapCenterY - 58
-                    )
                     .allowsHitTesting(false)
 
                 TutorialBubble(step: step, action: advanceAction)
@@ -167,7 +214,7 @@ private struct ScannerTutorialOverlay: View {
     ) -> CGFloat {
         switch step {
         case .lens:
-            return max(150, lensCenterY - (lensSize / 2) - 74)
+            return max(138, lensCenterY - (lensSize / 2) - 68)
         case .swap:
             return min(screenHeight - 178, swapCenterY + 122)
         }
@@ -182,41 +229,20 @@ private struct TutorialFocusRing: View {
     var body: some View {
         ZStack {
             Circle()
-                .strokeBorder(Color.white.opacity(0.96), lineWidth: step == .lens ? 4 : 3)
+                .strokeBorder(Color.white.opacity(0.9), lineWidth: 2)
                 .frame(width: size, height: size)
 
             Circle()
-                .strokeBorder(Color(red: 0.98, green: 0.75, blue: 0.21), lineWidth: 4)
-                .frame(width: size + 12, height: size + 12)
-                .scaleEffect(isPulsing ? 1.08 : 0.96)
-                .opacity(isPulsing ? 0.28 : 0.82)
+                .strokeBorder(Color.white.opacity(0.44), lineWidth: 1)
+                .frame(width: size + 10, height: size + 10)
+                .scaleEffect(isPulsing ? 1.05 : 0.98)
+                .opacity(isPulsing ? 0.18 : 0.58)
         }
         .onAppear {
             withAnimation(.easeInOut(duration: 0.82).repeatForever(autoreverses: true)) {
                 isPulsing = true
             }
         }
-    }
-}
-
-private struct TutorialPointer: View {
-    let step: ScannerTutorialStep
-    @State private var isFloating = false
-
-    var body: some View {
-        Image(systemName: step == .lens ? "arrow.up" : "arrow.down")
-            .font(.system(size: 24, weight: .bold))
-            .foregroundStyle(.white)
-            .padding(12)
-            .background(Color(red: 0.98, green: 0.45, blue: 0.18))
-            .clipShape(Circle())
-            .shadow(color: .black.opacity(0.28), radius: 10, y: 6)
-            .offset(y: isFloating ? -6 : 6)
-            .onAppear {
-                withAnimation(.easeInOut(duration: 0.62).repeatForever(autoreverses: true)) {
-                    isFloating = true
-                }
-            }
     }
 }
 
@@ -228,7 +254,7 @@ private struct TutorialBubble: View {
         VStack(alignment: .leading, spacing: 12) {
             Label(title, systemImage: iconName)
                 .font(.headline)
-                .foregroundStyle(Color(red: 0.49, green: 0.19, blue: 0.62))
+                .foregroundStyle(Color(red: 0.18, green: 0.12, blue: 0.23))
 
             Text(message)
                 .font(.body.weight(.semibold))
@@ -241,15 +267,15 @@ private struct TutorialBubble: View {
                     .foregroundStyle(.white)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
-                    .background(Color(red: 0.49, green: 0.19, blue: 0.62))
+                    .background(Color(red: 0.18, green: 0.12, blue: 0.23))
                     .clipShape(RoundedRectangle(cornerRadius: 8))
             }
             .buttonStyle(.plain)
         }
         .padding(16)
-        .background(.white.opacity(0.94))
+        .background(.white.opacity(0.9))
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .shadow(color: .black.opacity(0.26), radius: 18, y: 8)
+        .shadow(color: .black.opacity(0.16), radius: 14, y: 6)
         .transition(.scale(scale: 0.92).combined(with: .opacity))
     }
 
@@ -293,17 +319,19 @@ private struct TutorialBubble: View {
 private struct MagnifyingScannerOverlay: View {
     let artwork: ArtworkTarget
     let showsReferenceImage: Bool
+    let isSwapBubbleDipped: Bool
     let namespace: Namespace.ID
     let swapAction: () -> Void
 
     var body: some View {
         GeometryReader { proxy in
-            let lensSize = min(proxy.size.width * 0.78, proxy.size.height * 0.46)
-            let lensCenterY = proxy.size.height * 0.47
-            let swapSize: CGFloat = 82
+            let lensSize = min(proxy.size.width * 0.92, proxy.size.height * 0.54)
+            let lensCenterY = proxy.size.height * 0.48
+            let swapSize: CGFloat = 86
 
             ZStack {
-                Color.black.opacity(0.52)
+                Color(red: 0.48, green: 0.12, blue: 0.72)
+                    .opacity(showsReferenceImage ? 0.32 : 0.26)
                     .mask {
                         Rectangle()
                             .overlay {
@@ -316,41 +344,79 @@ private struct MagnifyingScannerOverlay: View {
                     .compositingGroup()
                     .allowsHitTesting(false)
 
-                Circle()
-                    .strokeBorder(.white.opacity(0.94), lineWidth: 5)
-                    .frame(width: lensSize, height: lensSize)
-                    .position(x: proxy.size.width / 2, y: lensCenterY)
-                    .shadow(color: .black.opacity(0.35), radius: 16, y: 8)
-                    .allowsHitTesting(false)
-
-                Circle()
-                    .strokeBorder(Color(red: 0.98, green: 0.75, blue: 0.21), lineWidth: 3)
-                    .frame(width: lensSize + 12, height: lensSize + 12)
-                    .position(x: proxy.size.width / 2, y: lensCenterY)
-                    .scaleEffect(showsReferenceImage ? 1.03 : 0.98)
-                    .opacity(showsReferenceImage ? 0.95 : 0.72)
+                PurpleLensChrome(lensSize: lensSize, lensCenterY: lensCenterY)
                     .allowsHitTesting(false)
 
                 SwapPreviewButton(
                     artwork: artwork,
                     showsReferenceImage: showsReferenceImage,
+                    isDipped: isSwapBubbleDipped,
                     namespace: namespace,
                     action: swapAction
                 )
                 .frame(width: swapSize, height: swapSize)
                 .position(
                     x: proxy.size.width / 2,
-                    y: lensCenterY + (lensSize / 2) - (swapSize * 0.18)
+                    y: lensCenterY + (lensSize / 2) - (swapSize * 0.2)
                 )
             }
         }
         .animation(.easeInOut(duration: 0.22), value: showsReferenceImage)
+        .animation(.easeInOut(duration: 0.18), value: isSwapBubbleDipped)
+    }
+}
+
+private struct PurpleLensChrome: View {
+    let lensSize: CGFloat
+    let lensCenterY: CGFloat
+
+    var body: some View {
+        GeometryReader { proxy in
+            let centerX = proxy.size.width / 2
+            let handleWidth = lensSize * 0.17
+            let handleHeight = lensSize * 0.56
+
+            ZStack {
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.86, green: 0.42, blue: 1.0),
+                                Color(red: 0.54, green: 0.12, blue: 0.88)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .frame(width: handleWidth, height: handleHeight)
+                    .rotationEffect(.degrees(32))
+                    .shadow(color: Color(red: 0.65, green: 0.18, blue: 1.0).opacity(0.42), radius: 18)
+                    .position(x: centerX - lensSize * 0.43, y: lensCenterY + lensSize * 0.55)
+
+                Circle()
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.90, green: 0.52, blue: 1.0),
+                                Color(red: 0.54, green: 0.12, blue: 0.88)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        lineWidth: 22
+                    )
+                    .frame(width: lensSize, height: lensSize)
+                    .shadow(color: Color(red: 0.64, green: 0.18, blue: 1.0).opacity(0.48), radius: 18)
+                    .position(x: centerX, y: lensCenterY)
+            }
+        }
     }
 }
 
 private struct SwapPreviewButton: View {
     let artwork: ArtworkTarget
     let showsReferenceImage: Bool
+    let isDipped: Bool
     let namespace: Namespace.ID
     let action: () -> Void
 
@@ -358,35 +424,33 @@ private struct SwapPreviewButton: View {
         Button(action: action) {
             ZStack {
                 Circle()
-                    .fill(.white)
-                    .shadow(color: .black.opacity(0.28), radius: 12, y: 6)
-
-                Circle()
-                    .fill(Color(red: 0.49, green: 0.19, blue: 0.62).opacity(0.12))
-                    .padding(5)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.78, green: 0.36, blue: 1.0),
+                                Color(red: 0.56, green: 0.16, blue: 0.92)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .shadow(color: Color(red: 0.60, green: 0.18, blue: 1.0).opacity(isDipped ? 0.12 : 0.36), radius: isDipped ? 5 : 14, y: isDipped ? 2 : 8)
 
                 if showsReferenceImage {
                     Image(systemName: "camera.viewfinder")
-                        .font(.system(size: 31, weight: .bold))
-                        .foregroundStyle(Color(red: 0.49, green: 0.19, blue: 0.62))
+                        .font(.system(size: 34, weight: .semibold))
+                        .foregroundStyle(.white)
                         .matchedGeometryEffect(id: "swapIcon", in: namespace)
                 } else {
                     ReferenceThumbnail(artwork: artwork)
                         .matchedGeometryEffect(id: "swapIcon", in: namespace)
                         .clipShape(Circle())
-                        .padding(8)
+                        .padding(7)
                 }
-
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(.white)
-                    .padding(7)
-                    .background(Color(red: 0.98, green: 0.45, blue: 0.18))
-                    .clipShape(Circle())
-                    .offset(x: 27, y: 27)
             }
-            .rotationEffect(.degrees(showsReferenceImage ? 360 : 0))
-            .scaleEffect(showsReferenceImage ? 1.04 : 1)
+            .offset(y: isDipped ? 18 : 0)
+            .scaleEffect(isDipped ? 0.74 : 1)
+            .opacity(isDipped ? 0.46 : 1)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(showsReferenceImage ? "Torna alla camera" : "Mostra immagine di riferimento")
@@ -398,38 +462,37 @@ private struct ReferenceScannerSurface: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let lensSize = min(proxy.size.width * 0.78, proxy.size.height * 0.46)
-            let lensCenterY = proxy.size.height * 0.47
-            let referenceSize = lensSize * 0.86
+            let lensSize = min(proxy.size.width * 0.92, proxy.size.height * 0.54)
+            let lensCenterY = proxy.size.height * 0.48
+            let referenceSize = lensSize * 0.88
 
             ZStack {
-                Color(red: 0.12, green: 0.09, blue: 0.16)
-
                 ReferenceArtworkImage(artwork: artwork)
                     .scaledToFill()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .blur(radius: 18)
-                    .opacity(0.32)
+                    .opacity(0.42)
+
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.34, green: 0.08, blue: 0.50).opacity(0.82),
+                        Color(red: 0.56, green: 0.20, blue: 0.82).opacity(0.74)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
 
                 ReferenceArtworkImage(artwork: artwork)
-                    .scaledToFit()
+                    .scaledToFill()
                     .frame(width: referenceSize, height: referenceSize)
                     .clipShape(Circle())
-                    .overlay {
-                        Circle()
-                            .strokeBorder(.white.opacity(0.88), lineWidth: 2)
-                    }
-                    .shadow(color: .black.opacity(0.35), radius: 18, y: 10)
                     .position(x: proxy.size.width / 2, y: lensCenterY)
 
                 Text(artwork.targetTitle)
-                    .font(.headline)
-                    .foregroundStyle(.white)
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.92))
                     .multilineTextAlignment(.center)
-                    .padding(.horizontal, 18)
-                    .padding(.vertical, 10)
-                    .background(.black.opacity(0.42))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .padding(.horizontal, 22)
                     .position(x: proxy.size.width / 2, y: max(72, lensCenterY - (lensSize / 2) - 34))
             }
         }
@@ -488,8 +551,8 @@ private struct ScannerHeader: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("Scanner AR + Core ML", systemImage: "camera.viewfinder")
-                .font(.headline)
+            Label("Scanner AR", systemImage: "camera.viewfinder")
+                .font(.subheadline.weight(.semibold))
 
             Text(artwork.targetTitle)
                 .font(.title2.bold())
@@ -500,14 +563,19 @@ private struct ScannerHeader: View {
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(.black.opacity(0.55))
+        .background(
+            LinearGradient(
+                colors: [.black.opacity(0.52), .black.opacity(0)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
     }
 }
 
 private struct ARSceneView: UIViewRepresentable {
     func makeUIView(context: Context) -> ARSCNView {
         let view = ARSCNView(frame: .zero)
-        view.delegate = context.coordinator
         view.autoenablesDefaultLighting = true
         view.scene = SCNScene()
 
@@ -517,7 +585,6 @@ private struct ARSceneView: UIViewRepresentable {
             view.session.run(configuration)
         }
 
-        context.coordinator.placeDemoTreasure(in: view)
         return view
     }
 
@@ -525,27 +592,5 @@ private struct ARSceneView: UIViewRepresentable {
 
     static func dismantleUIView(_ uiView: ARSCNView, coordinator: Coordinator) {
         uiView.session.pause()
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator()
-    }
-
-    final class Coordinator: NSObject, ARSCNViewDelegate {
-        func placeDemoTreasure(in view: ARSCNView) {
-            let node = SCNNode(geometry: SCNSphere(radius: 0.08))
-            node.geometry?.firstMaterial?.diffuse.contents = UIColor.systemYellow
-            node.position = SCNVector3(0, 0, -0.55)
-
-            let pulse = CABasicAnimation(keyPath: "opacity")
-            pulse.fromValue = 0.45
-            pulse.toValue = 1
-            pulse.duration = 0.8
-            pulse.autoreverses = true
-            pulse.repeatCount = .infinity
-            node.addAnimation(pulse, forKey: "pulse")
-
-            view.scene.rootNode.addChildNode(node)
-        }
     }
 }
