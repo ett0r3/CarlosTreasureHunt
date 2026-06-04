@@ -97,9 +97,10 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
 
     func setupModel() {
 
-        guard let model = try? VNCoreMLModel(
-            for: CapodimonteClassifier().model
-        ) else {
+        guard
+            let mlModel = try? ArtworkRecognitionService.loadBundledModel(),
+            let model = try? VNCoreMLModel(for: mlModel)
+        else {
             return
         }
 
@@ -146,13 +147,13 @@ struct CameraPreview: UIViewRepresentable {
 
     func makeUIView(context: Context) -> UIView {
 
-        let view = UIView(frame: UIScreen.main.bounds)
+        let view = UIView(frame: .zero)
 
         let previewLayer = AVCaptureVideoPreviewLayer(
             session: session
         )
 
-        previewLayer.frame = view.frame
+        previewLayer.frame = view.bounds
         previewLayer.videoGravity = .resizeAspectFill
 
         view.layer.addSublayer(previewLayer)
@@ -160,9 +161,15 @@ struct CameraPreview: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: UIView, context: Context) {}
+    func updateUIView(_ uiView: UIView, context: Context) {
+        uiView.layer.sublayers?.forEach { layer in
+            layer.frame = uiView.bounds
+        }
+    }
 }
 
-#Preview {
-    CameraView()
+struct CameraView_Previews: PreviewProvider {
+    static var previews: some View {
+        CameraView()
+    }
 }

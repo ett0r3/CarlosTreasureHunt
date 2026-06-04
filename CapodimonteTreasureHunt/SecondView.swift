@@ -15,6 +15,8 @@ struct SecondView: View {
     }
 }
 
-#Preview {
-    SecondView()
+struct SecondView_Previews: PreviewProvider {
+    static var previews: some View {
+        SecondView()
+    }
 }

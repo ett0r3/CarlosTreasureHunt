@@ -13,10 +13,20 @@ struct ArtworkRecognitionResult {
 }
 
 final class ArtworkRecognitionService {
+    static let modelResourceName = "CapodimonteClassifier"
+
     private let minimumConfidence: Double
 
-    init(minimumConfidence: Double = 0.82) {
+    init(minimumConfidence: Double = 0.80) {
         self.minimumConfidence = minimumConfidence
+    }
+
+    static func loadBundledModel() throws -> MLModel {
+        guard let modelURL = Bundle.main.url(forResource: modelResourceName, withExtension: "mlmodelc") else {
+            throw ModelLoadingError.missingCompiledModel(modelResourceName)
+        }
+
+        return try MLModel(contentsOf: modelURL)
     }
 
     func matches(_ result: ArtworkRecognitionResult, target: ArtworkTarget) -> Bool {
@@ -42,6 +52,17 @@ final class ArtworkRecognitionService {
                     confidence: Double(bestObservation.confidence)
                 )
             )
+        }
+    }
+}
+
+enum ModelLoadingError: LocalizedError {
+    case missingCompiledModel(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .missingCompiledModel(let modelName):
+            return "Compiled Core ML model not found in app bundle: \(modelName).mlmodelc"
         }
     }
 }

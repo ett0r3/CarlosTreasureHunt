@@ -6,6 +6,7 @@
 import ARKit
 import SceneKit
 import SwiftUI
+import Vision
 
 struct ARScannerView: View {
     @EnvironmentObject private var game: GameStore
@@ -15,6 +16,9 @@ struct ARScannerView: View {
     @State private var isSwapBubbleDipped = false
     @State private var tutorialStep: ScannerTutorialStep = .lens
     @State private var hasCompletedTutorialInCurrentSession = false
+    @State private var recognitionStatus = "Cerco il dettaglio..."
+    @State private var recognizedResult: ArtworkRecognitionResult?
+    @State private var didCompleteRecognition = false
     let artworkID: UUID
 
     private var isShowingTutorial: Bool {
@@ -30,7 +34,9 @@ struct ARScannerView: View {
                             .matchedGeometryEffect(id: "scannerSurface", in: swapNamespace)
                             .transition(.opacity.combined(with: .scale(scale: 0.985)))
                     } else {
-                        ARSceneView()
+                        ARSceneView(artwork: artwork) { result in
+                            handleRecognitionResult(result, for: artwork)
+                        }
                             .matchedGeometryEffect(id: "scannerSurface", in: swapNamespace)
                             .transition(.opacity.combined(with: .scale(scale: 1.015)))
                     }
@@ -48,19 +54,24 @@ struct ARScannerView: View {
                 .allowsHitTesting(!isShowingTutorial || tutorialStep == .swap)
                 .ignoresSafeArea()
             } else {
-                ARSceneView()
+                ARSceneView(artwork: nil) { _ in }
                     .ignoresSafeArea()
             }
 
             VStack {
                 if let artwork = game.artwork(with: artworkID) {
-                    ScannerHeader(artwork: artwork, playerName: game.displayName)
+                    ScannerHeader(
+                        artwork: artwork,
+                        playerName: game.displayName,
+                        recognitionStatus: recognitionStatus,
+                        confidenceText: confidenceText
+                    )
                 }
 
                 Spacer()
 
                 if let artwork = game.artwork(with: artworkID) {
-                    ScannerActionButton(title: "Target riconosciuto", systemImage: "checkmark") {
+                    ScannerActionButton(title: "Conferma test", systemImage: "checkmark") {
                         game.completeScan(for: artwork)
                     }
                     .padding(20)
@@ -124,6 +135,36 @@ struct ARScannerView: View {
             case .swap:
                 hasCompletedTutorialInCurrentSession = true
             }
+        }
+    }
+
+    private var confidenceText: String? {
+        guard let recognizedResult else {
+            return nil
+        }
+
+        return "\(recognizedResult.label) · \(Int(recognizedResult.confidence * 100))%"
+    }
+
+    private func handleRecognitionResult(_ result: ArtworkRecognitionResult?, for artwork: ArtworkTarget) {
+        guard let result else {
+            if !didCompleteRecognition {
+                recognitionStatus = "Cerco il dettaglio..."
+            }
+            return
+        }
+
+        recognizedResult = result
+
+        if ArtworkRecognitionService().matches(result, target: artwork) {
+            recognitionStatus = "Dettaglio riconosciuto"
+
+            if !isShowingTutorial && !showsReferenceImage && !didCompleteRecognition {
+                didCompleteRecognition = true
+                game.completeScan(for: artwork)
+            }
+        } else {
+            recognitionStatus = "Continua a inquadrare"
         }
     }
 }
@@ -548,6 +589,8 @@ private struct ReferenceArtworkImage: View {
 private struct ScannerHeader: View {
     let artwork: ArtworkTarget
     let playerName: String
+    let recognitionStatus: String
+    let confidenceText: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -559,6 +602,17 @@ private struct ScannerHeader: View {
 
             Text("\(playerName), punta la camera sul dettaglio del quadro.")
                 .font(.subheadline)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(recognitionStatus)
+                    .font(.caption.weight(.semibold))
+
+                if let confidenceText {
+                    Text(confidenceText)
+                        .font(.caption2)
+                        .opacity(0.78)
+                }
+            }
         }
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -574,8 +628,12 @@ private struct ScannerHeader: View {
 }
 
 private struct ARSceneView: UIViewRepresentable {
+    let artwork: ArtworkTarget?
+    let onRecognitionUpdate: (ArtworkRecognitionResult?) -> Void
+
     func makeUIView(context: Context) -> ARSCNView {
         let view = ARSCNView(frame: .zero)
+        view.session.delegate = context.coordinator
         view.autoenablesDefaultLighting = true
         view.scene = SCNScene()
 
@@ -592,5 +650,68 @@ private struct ARSceneView: UIViewRepresentable {
 
     static func dismantleUIView(_ uiView: ARSCNView, coordinator: Coordinator) {
         uiView.session.pause()
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(artwork: artwork, onRecognitionUpdate: onRecognitionUpdate)
+    }
+
+    final class Coordinator: NSObject, ARSessionDelegate {
+        private let service = ArtworkRecognitionService()
+        private let visionQueue = DispatchQueue(label: "capodimonte.coreml.vision")
+        private var request: VNCoreMLRequest?
+        private var isProcessingFrame = false
+        private var lastAnalysisTime: TimeInterval = 0
+        private var artwork: ArtworkTarget?
+        private var onRecognitionUpdate: (ArtworkRecognitionResult?) -> Void
+
+        init(artwork: ArtworkTarget?, onRecognitionUpdate: @escaping (ArtworkRecognitionResult?) -> Void) {
+            self.artwork = artwork
+            self.onRecognitionUpdate = onRecognitionUpdate
+            super.init()
+            configureModel()
+        }
+
+        func session(_ session: ARSession, didUpdate frame: ARFrame) {
+            guard request != nil else {
+                return
+            }
+
+            let currentTime = frame.timestamp
+
+            guard !isProcessingFrame, currentTime - lastAnalysisTime > 0.45 else {
+                return
+            }
+
+            isProcessingFrame = true
+            lastAnalysisTime = currentTime
+            let pixelBuffer = frame.capturedImage
+
+            visionQueue.async { [weak self] in
+                guard let self, let request = self.request else {
+                    return
+                }
+
+                let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .right)
+                try? handler.perform([request])
+                self.isProcessingFrame = false
+            }
+        }
+
+        private func configureModel() {
+            do {
+                let model = try ArtworkRecognitionService.loadBundledModel()
+                request = try service.makeVisionRequest(model: model) { [weak self] result in
+                    DispatchQueue.main.async {
+                        self?.onRecognitionUpdate(result)
+                    }
+                }
+                request?.imageCropAndScaleOption = .centerCrop
+            } catch {
+                DispatchQueue.main.async { [onRecognitionUpdate] in
+                    onRecognitionUpdate(nil)
+                }
+            }
+        }
     }
 }

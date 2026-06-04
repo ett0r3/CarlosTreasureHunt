@@ -80,6 +80,9 @@ extension MissionCollection {
             artworks: words.enumerated().map { index, word in
                 let order = index + 1
 
+                let testAssetName = idNumber == 1 ? "Artwork\(order)" : nil
+                let coreMLLabel = idNumber == 1 ? "Artwork\(order)" : "target"
+
                 return ArtworkTarget(
                     id: demoUUID(idNumber * 100 + order),
                     title: "Opera \(order)",
@@ -91,9 +94,9 @@ extension MissionCollection {
                     narratorPrompt: "Cerca il dettaglio \(order): e il prossimo passo della collezione.",
                     unlockedWord: word,
                     order: order,
-                    imageAssetName: nil,
-                    targetAssetName: nil,
-                    coreMLLabel: "mission_\(idNumber)_detail_\(order)"
+                    imageAssetName: testAssetName,
+                    targetAssetName: testAssetName,
+                    coreMLLabel: coreMLLabel
                 )
             }
         )
