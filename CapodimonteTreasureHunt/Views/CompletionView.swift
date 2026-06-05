@@ -11,48 +11,80 @@ struct CompletionView: View {
 
     var body: some View {
         ZStack {
-            GameBackground()
+            PurpleGameBackground(sparklesOpacity: 0.24)
 
             if let mission = game.mission(with: missionID) {
-                VStack(spacing: 22) {
+                VStack(spacing: 20) {
+                    Spacer()
+
                     Image(systemName: "trophy.fill")
-                        .font(.system(size: 84))
-                        .foregroundStyle(Color(red: 0.84, green: 0.48, blue: 0.08))
+                        .font(.system(size: 84, weight: .black))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 1.0, green: 0.84, blue: 0.22),
+                                    Color(red: 0.93, green: 0.46, blue: 0.0)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                        )
+                        .shadow(color: Color(red: 1.0, green: 0.70, blue: 0.0).opacity(0.34), radius: 18, y: 8)
 
-                    Text("Missione completata")
-                        .font(.largeTitle.bold())
-                        .foregroundStyle(Color(red: 0.18, green: 0.12, blue: 0.23))
-
-                    Text("\(game.displayName), hai completato \(mission.title). La frase segreta e:")
-                        .font(.title3)
+                    Text("Mission completed")
+                        .font(.system(size: 32, weight: .black, design: .rounded))
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(Color(red: 0.23, green: 0.21, blue: 0.25))
+                        .foregroundStyle(.white)
+
+                    Text("\(game.displayName), you completed \(mission.title). The secret phrase is:")
+                        .font(.system(size: 17, weight: .semibold, design: .rounded))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.white.opacity(0.88))
+                        .padding(.horizontal, 28)
 
                     Text(mission.completedPhrase)
-                        .font(.title.bold())
+                        .font(.system(size: 24, weight: .black, design: .rounded))
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(Color(red: 0.49, green: 0.19, blue: 0.62))
-                        .padding(16)
+                        .foregroundStyle(Color(red: 0.55, green: 0.35, blue: 0.02))
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 18)
                         .frame(maxWidth: .infinity)
-                        .background(.white.opacity(0.86))
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color(red: 1.0, green: 0.92, blue: 0.46))
+                                .shadow(color: Color(red: 0.96, green: 0.74, blue: 0.20).opacity(0.24), radius: 18, y: 8)
+                        )
+                        .padding(.horizontal, 24)
 
                     Button {
                         game.openGallery()
                     } label: {
-                        Label("Guarda la galleria", systemImage: "book.pages")
-                            .font(.headline)
-                            .foregroundStyle(Color(red: 0.49, green: 0.19, blue: 0.62))
+                        Label("View gallery", systemImage: "book.pages")
+                            .font(.system(size: 15, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
                     }
                     .buttonStyle(.plain)
 
-                    PrimaryButton(title: "Ricomincia", systemImage: "arrow.clockwise") {
+                    Button {
                         game.restart()
+                    } label: {
+                        Label("Restart", systemImage: "arrow.clockwise")
+                            .font(.system(size: 16, weight: .black, design: .rounded))
+                            .foregroundStyle(Color(red: 0.47, green: 0.28, blue: 0.0))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 15)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(GameTheme.gold)
+                            )
                     }
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 24)
+
+                    Spacer()
                 }
-                .padding(24)
             } else {
-                ContentUnavailableView("Missione non trovata", systemImage: "questionmark.circle")
+                ContentUnavailableView("Mission not found", systemImage: "questionmark.circle")
             }
         }
         .navigationBarBackButtonHidden()

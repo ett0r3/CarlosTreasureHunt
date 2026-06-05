@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="402px" height="702px" viewBox="0 0 402 702" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>Star 2</title>
+    <defs>
+        <linearGradient x1="63.6803964%" y1="4.04322027%" x2="50%" y2="95.9567797%" id="linearGradient-1">
+            <stop stop-color="#FFFFFF" offset="0%"></stop>
+            <stop stop-color="#E3AA1B" offset="100%"></stop>
+        </linearGradient>
+        <path d="M130.70944,617.234332 L110.701443,646 L116.387536,618.726663 C128.858005,558.912076 76.4628918,505.66068 16.4540253,517.159961 L-17,523.570635 L5.57333469,509.139368 C58.2433311,475.467128 58.2433311,398.532872 5.57333469,364.860632 L-17,350.429365 L16.4540253,356.840039 C76.4628918,368.33932 128.858005,315.087924 116.387536,255.273337 L110.701443,228 L130.70944,256.765668 C164.77377,305.740248 237.22623,305.740248 271.29056,256.765668 L291.298557,228 L285.612464,255.273337 C273.141995,315.087924 325.537108,368.33932 385.545975,356.840039 L419,350.429365 L396.426665,364.860632 C343.756669,398.532872 343.756669,475.467128 396.426665,509.139368 L419,523.570635 L385.545975,517.159961 C325.537108,505.66068 273.141995,558.912076 285.612464,618.726663 L291.298557,646 L271.29056,617.234332 C237.22623,568.259752 164.77377,568.259752 130.70944,617.234332 Z" id="path-2"></path>
+        <filter x="-36.0%" y="-36.6%" width="172.0%" height="175.1%" filterUnits="objectBoundingBox" id="filter-3">
+            <feOffset dx="0" dy="4" in="SourceAlpha" result="shadowOffsetOuter1"></feOffset>
+            <feGaussianBlur stdDeviation="55" in="shadowOffsetOuter1" result="shadowBlurOuter1"></feGaussianBlur>
+            <feColorMatrix values="0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.55 0" type="matrix" in="shadowBlurOuter1"></feColorMatrix>
+        </filter>
+        <filter x="-36.0%" y="-36.6%" width="172.0%" height="175.1%" filterUnits="objectBoundingBox" id="filter-4">
+            <feGaussianBlur stdDeviation="55" in="SourceAlpha" result="shadowBlurInner1"></feGaussianBlur>
+            <feOffset dx="0" dy="4" in="shadowBlurInner1" result="shadowOffsetInner1"></feOffset>
+            <feComposite in="shadowOffsetInner1" in2="SourceAlpha" operator="arithmetic" k2="-1" k3="1" result="shadowInnerInner1"></feComposite>
+            <feColorMatrix values="0 0 0 0 0.91372549   0 0 0 0 0.737254902   0 0 0 0 0.294117647  0 0 0 0.55 0" type="matrix" in="shadowInnerInner1"></feColorMatrix>
+        </filter>
+    </defs>
+    <g id="Page-1" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="iPhone-17-Pro-Copy-19" transform="translate(0, -90)">
+            <g id="Star-2" transform="translate(201, 437) rotate(-8) translate(-201, -437)">
+                <use fill="black" fill-opacity="1" filter="url(#filter-3)" xlink:href="#path-2"></use>
+                <use fill="url(#linearGradient-1)" fill-rule="evenodd" xlink:href="#path-2"></use>
+                <use fill="black" fill-opacity="1" filter="url(#filter-4)" xlink:href="#path-2"></use>
+            </g>
+        </g>
+    </g>
+</svg>

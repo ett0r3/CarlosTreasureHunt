@@ -10,14 +10,11 @@ import Vision
 
 struct ARScannerView: View {
     @EnvironmentObject private var game: GameStore
-    @AppStorage("hasSeenScannerTutorial") private var hasSeenScannerTutorial = false
     @Namespace private var swapNamespace
     @State private var showsReferenceImage = false
     @State private var isSwapBubbleDipped = false
     @State private var tutorialStep: ScannerTutorialStep = .lens
     @State private var hasCompletedTutorialInCurrentSession = false
-    @State private var recognitionStatus = "Cerco il dettaglio..."
-    @State private var recognizedResult: ArtworkRecognitionResult?
     @State private var didCompleteRecognition = false
     let artworkID: UUID
 
@@ -58,35 +55,20 @@ struct ARScannerView: View {
                     .ignoresSafeArea()
             }
 
-            VStack {
-                if let artwork = game.artwork(with: artworkID) {
-                    ScannerHeader(
-                        artwork: artwork,
-                        playerName: game.displayName,
-                        recognitionStatus: recognitionStatus,
-                        confidenceText: confidenceText
-                    )
-                }
-
-                Spacer()
-
-                if let artwork = game.artwork(with: artworkID) {
-                    ScannerActionButton(title: "Conferma test", systemImage: "checkmark") {
-                        game.completeScan(for: artwork)
-                    }
-                    .padding(20)
-                    .background(.black.opacity(0.001))
-                    .opacity(isShowingTutorial ? 0.45 : 1)
-                    .disabled(isShowingTutorial)
-                }
-            }
-
             if isShowingTutorial {
-                ScannerTutorialOverlay(step: tutorialStep) {
-                    advanceTutorial()
+                if tutorialStep == .ready {
+                    ScannerReadyOverlay {
+                        advanceTutorial()
+                    }
+                    .ignoresSafeArea()
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                } else {
+                    ScannerTutorialOverlay(step: tutorialStep) {
+                        advanceTutorial()
+                    }
+                    .ignoresSafeArea()
+                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
                 }
-                .ignoresSafeArea()
-                .transition(.opacity.combined(with: .scale(scale: 0.98)))
             }
         }
         .navigationTitle("")
@@ -111,90 +93,37 @@ struct ARScannerView: View {
         }
     }
 
-    private func openReferenceFromTutorial() {
-        if !showsReferenceImage {
-            swapReferenceView()
-        } else {
-            withAnimation(.easeInOut(duration: 0.16)) {
-                isSwapBubbleDipped = true
-            }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.76)) {
-                    isSwapBubbleDipped = false
-                }
-            }
-        }
-    }
-
     private func advanceTutorial() {
         withAnimation(.interactiveSpring(response: 0.46, dampingFraction: 0.78, blendDuration: 0.08)) {
             switch tutorialStep {
             case .lens:
                 tutorialStep = .swap
             case .swap:
+                tutorialStep = .ready
+            case .ready:
                 hasCompletedTutorialInCurrentSession = true
             }
         }
     }
 
-    private var confidenceText: String? {
-        guard let recognizedResult else {
-            return nil
-        }
-
-        return "\(recognizedResult.label) · \(Int(recognizedResult.confidence * 100))%"
-    }
-
     private func handleRecognitionResult(_ result: ArtworkRecognitionResult?, for artwork: ArtworkTarget) {
         guard let result else {
-            if !didCompleteRecognition {
-                recognitionStatus = "Cerco il dettaglio..."
-            }
             return
         }
 
-        recognizedResult = result
-
         if ArtworkRecognitionService().matches(result, target: artwork) {
-            recognitionStatus = "Dettaglio riconosciuto"
-
             if !isShowingTutorial && !showsReferenceImage && !didCompleteRecognition {
                 didCompleteRecognition = true
                 game.completeScan(for: artwork)
             }
-        } else {
-            recognitionStatus = "Continua a inquadrare"
         }
-    }
-}
-
-private struct ScannerActionButton: View {
-    let title: String
-    let systemImage: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .font(.headline)
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14)
-                .background(.ultraThinMaterial)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(.white.opacity(0.28), lineWidth: 1)
-                }
-        }
-        .buttonStyle(.plain)
     }
 }
 
 private enum ScannerTutorialStep {
     case lens
     case swap
+    case ready
 }
 
 private struct ScannerTutorialOverlay: View {
@@ -258,6 +187,8 @@ private struct ScannerTutorialOverlay: View {
             return max(138, lensCenterY - (lensSize / 2) - 68)
         case .swap:
             return min(screenHeight - 178, swapCenterY + 122)
+        case .ready:
+            return screenHeight / 2
         }
     }
 }
@@ -323,9 +254,11 @@ private struct TutorialBubble: View {
     private var title: String {
         switch step {
         case .lens:
-            return "La lente"
+            return "The lens"
         case .swap:
-            return "Immagine guida"
+            return "Guide image"
+        case .ready:
+            return ""
         }
     }
 
@@ -335,24 +268,86 @@ private struct TutorialBubble: View {
             return "viewfinder.circle"
         case .swap:
             return "arrow.triangle.2.circlepath"
+        case .ready:
+            return "sparkles"
         }
     }
 
     private var message: String {
         switch step {
         case .lens:
-            return "Metti il dettaglio del quadro dentro la lente."
+            return "Place the hidden detail inside the lens."
         case .swap:
-            return "Premi questo cerchio quando vuoi vedere l'immagine guida."
+            return "Tap this button whenever you need to see the guide image."
+        case .ready:
+            return ""
         }
     }
 
     private var buttonTitle: String {
         switch step {
         case .lens:
-            return "Ho capito"
+            return "Got it"
         case .swap:
-            return "Ok, ci sono"
+            return "I'm ready"
+        case .ready:
+            return ""
+        }
+    }
+}
+
+private struct ScannerReadyOverlay: View {
+    let action: () -> Void
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.98, green: 0.90, blue: 0.77),
+                    Color(red: 0.95, green: 0.85, blue: 0.68)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            GeometryReader { proxy in
+                Image("carlo-intro6")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+                    .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+
+                VStack(spacing: 6) {
+                    Text("Okay, Explorer!")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+
+                    Text("Now you're all set.")
+                        .font(.system(size: 15, weight: .semibold, design: .rounded))
+
+                    Text("Let's begin!")
+                        .font(.system(size: 19, weight: .black, design: .rounded))
+                }
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Color(red: 0.06, green: 0.05, blue: 0.05))
+                .frame(width: proxy.size.width * 0.60, height: proxy.size.height * 0.18)
+                .position(x: proxy.size.width * 0.50, y: proxy.size.height * 0.20)
+
+                Button(action: action) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 25, weight: .black))
+                        .foregroundStyle(Color(red: 0.47, green: 0.28, blue: 0.0))
+                        .frame(width: 66, height: 66)
+                        .background(
+                            Circle()
+                                .fill(Color(red: 1.0, green: 0.74, blue: 0.0))
+                                .shadow(color: Color(red: 0.62, green: 0.32, blue: 0.0).opacity(0.22), radius: 9, y: 5)
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Begin")
+                .position(x: proxy.size.width - 62, y: proxy.size.height - 62)
+            }
         }
     }
 }
@@ -385,7 +380,7 @@ private struct MagnifyingScannerOverlay: View {
                     .compositingGroup()
                     .allowsHitTesting(false)
 
-                PurpleLensChrome(lensSize: lensSize, lensCenterY: lensCenterY)
+                ScannerYellowLensChrome(lensSize: lensSize, lensCenterY: lensCenterY)
                     .allowsHitTesting(false)
 
                 SwapPreviewButton(
@@ -407,7 +402,7 @@ private struct MagnifyingScannerOverlay: View {
     }
 }
 
-private struct PurpleLensChrome: View {
+private struct ScannerYellowLensChrome: View {
     let lensSize: CGFloat
     let lensCenterY: CGFloat
 
@@ -419,38 +414,38 @@ private struct PurpleLensChrome: View {
 
             ZStack {
                 Capsule()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.86, green: 0.42, blue: 1.0),
-                                Color(red: 0.54, green: 0.12, blue: 0.88)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                    )
+                    .fill(lensGradient)
                     .frame(width: handleWidth, height: handleHeight)
                     .rotationEffect(.degrees(32))
-                    .shadow(color: Color(red: 0.65, green: 0.18, blue: 1.0).opacity(0.42), radius: 18)
+                    .shadow(color: Color(red: 0.65, green: 0.44, blue: 0.08).opacity(0.34), radius: 16)
                     .position(x: centerX - lensSize * 0.43, y: lensCenterY + lensSize * 0.55)
 
                 Circle()
                     .strokeBorder(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 0.90, green: 0.52, blue: 1.0),
-                                Color(red: 0.54, green: 0.12, blue: 0.88)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        ),
+                        lensGradient,
                         lineWidth: 22
                     )
                     .frame(width: lensSize, height: lensSize)
-                    .shadow(color: Color(red: 0.64, green: 0.18, blue: 1.0).opacity(0.48), radius: 18)
+                    .shadow(color: Color(red: 0.65, green: 0.44, blue: 0.08).opacity(0.40), radius: 17)
+                    .position(x: centerX, y: lensCenterY)
+
+                Circle()
+                    .strokeBorder(Color.white.opacity(0.30), lineWidth: 3)
+                    .frame(width: lensSize - 18, height: lensSize - 18)
                     .position(x: centerX, y: lensCenterY)
             }
         }
+    }
+
+    private var lensGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 1.0, green: 0.88, blue: 0.33),
+                Color(red: 0.96, green: 0.65, blue: 0.06)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 }
 
@@ -494,7 +489,7 @@ private struct SwapPreviewButton: View {
             .opacity(isDipped ? 0.46 : 1)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(showsReferenceImage ? "Torna alla camera" : "Mostra immagine di riferimento")
+        .accessibilityLabel(showsReferenceImage ? "Back to camera" : "Show guide image")
     }
 }
 
@@ -572,7 +567,7 @@ private struct ReferenceArtworkImage: View {
                     Image(systemName: "photo.artframe")
                         .font(.system(size: 52, weight: .semibold))
 
-                    Text("Immagine guida")
+                    Text("Guide image")
                         .font(.headline)
 
                     Text(artwork.targetTitle)
@@ -583,47 +578,6 @@ private struct ReferenceArtworkImage: View {
                 .foregroundStyle(.white)
             }
         }
-    }
-}
-
-private struct ScannerHeader: View {
-    let artwork: ArtworkTarget
-    let playerName: String
-    let recognitionStatus: String
-    let confidenceText: String?
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Label("Scanner AR", systemImage: "camera.viewfinder")
-                .font(.subheadline.weight(.semibold))
-
-            Text(artwork.targetTitle)
-                .font(.title2.bold())
-
-            Text("\(playerName), punta la camera sul dettaglio del quadro.")
-                .font(.subheadline)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(recognitionStatus)
-                    .font(.caption.weight(.semibold))
-
-                if let confidenceText {
-                    Text(confidenceText)
-                        .font(.caption2)
-                        .opacity(0.78)
-                }
-            }
-        }
-        .foregroundStyle(.white)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(
-            LinearGradient(
-                colors: [.black.opacity(0.52), .black.opacity(0)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
     }
 }
 

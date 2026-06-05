@@ -11,54 +11,65 @@ struct WordRevealView: View {
 
     var body: some View {
         ZStack {
-            GameBackground()
+            PurpleGameBackground(raysOpacity: 0.22)
 
             if let artwork = game.artwork(with: artworkID), let mission = game.mission(containing: artworkID) {
-                VStack(spacing: 22) {
-                    Spacer()
+                GeometryReader { proxy in
+                    VStack(spacing: 0) {
+                        Spacer(minLength: proxy.size.height * 0.18)
 
-                    Text("Parola trovata")
-                        .font(.headline)
-                        .foregroundStyle(Color(red: 0.49, green: 0.19, blue: 0.62))
+                        Text(artwork.unlockedWord.uppercased())
+                            .font(.system(size: 34, weight: .black, design: .rounded))
+                            .foregroundStyle(Color(red: 0.55, green: 0.35, blue: 0.02))
+                            .minimumScaleFactor(0.64)
+                            .padding(.horizontal, 30)
+                            .padding(.vertical, 20)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill(GameTheme.goldGradient)
+                                    .shadow(color: Color(red: 0.96, green: 0.74, blue: 0.20).opacity(0.42), radius: 24, y: 10)
+                            )
 
-                    Text(artwork.unlockedWord)
-                        .font(.system(size: 48, weight: .bold))
-                        .multilineTextAlignment(.center)
-                        .foregroundStyle(Color(red: 0.18, green: 0.12, blue: 0.23))
-                        .minimumScaleFactor(0.62)
+                        Spacer()
 
-                    VStack(spacing: 8) {
-                        Text("Abbinata a")
-                            .font(.caption.weight(.bold))
-                            .foregroundStyle(.secondary)
+                        RewardCarloBubble(
+                            boldLead: "Good job, Explorer!",
+                            message: "You found the \(ordinalText(for: artwork.order)) word!"
+                        )
+                        .padding(.horizontal, 22)
+                        .padding(.bottom, 18)
 
-                        Text(artwork.title)
-                            .font(.title3.bold())
-                            .foregroundStyle(Color(red: 0.18, green: 0.12, blue: 0.23))
+                        PhraseProgressView(slots: game.phraseSlots(for: mission))
+                            .padding(.horizontal, 24)
+                            .padding(.bottom, 28)
 
-                        Text(artwork.targetTitle)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                        RewardNextButton {
+                            game.continueAfterWordReveal(for: artwork)
+                        }
+                        .padding(.bottom, 28)
                     }
-                    .padding(16)
-                    .frame(maxWidth: .infinity)
-                    .background(.white.opacity(0.78))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-
-                    PhraseProgressView(slots: game.phraseSlots(for: mission))
-
-                    Spacer()
-
-                    PrimaryButton(title: "Vedi il quadro", systemImage: "photo.artframe") {
-                        game.continueAfterWordReveal(for: artwork)
-                    }
+                    .frame(width: proxy.size.width, height: proxy.size.height)
                 }
-                .padding(24)
             } else {
-                ContentUnavailableView("Parola non trovata", systemImage: "questionmark.circle")
+                ContentUnavailableView("Word not found", systemImage: "questionmark.circle")
             }
         }
         .navigationBarBackButtonHidden()
+    }
+
+    private func ordinalText(for order: Int) -> String {
+        switch order {
+        case 1:
+            return "first"
+        case 2:
+            return "second"
+        case 3:
+            return "third"
+        case 4:
+            return "fourth"
+        default:
+            return "fifth"
+        }
     }
 }
 
@@ -68,70 +79,149 @@ struct ArtworkRevealView: View {
 
     var body: some View {
         ZStack {
-            GameBackground()
+            PurpleGameBackground(raysOpacity: 0.22)
 
             if let artwork = game.artwork(with: artworkID) {
-                ScrollView {
-                    VStack(spacing: 18) {
-                        Text("Quadro sbloccato")
-                            .font(.largeTitle.bold())
-                            .foregroundStyle(Color(red: 0.18, green: 0.12, blue: 0.23))
+                GeometryReader { proxy in
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 28)
 
-                        UnlockedArtworkCard(artwork: artwork)
+                        Text(artwork.title)
+                            .font(.system(size: 24, weight: .black, design: .rounded))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 28)
+                            .minimumScaleFactor(0.7)
 
-                        PrimaryButton(title: "Continua", systemImage: "arrow.right") {
+                        Text("by \(artwork.artist)")
+                            .font(.system(size: 13, weight: .black, design: .rounded))
+                            .foregroundStyle(.white)
+                            .padding(.top, 12)
+
+                        FullArtworkImage(artwork: artwork)
+                            .scaledToFill()
+                            .frame(width: min(proxy.size.width * 0.62, 260), height: min(proxy.size.height * 0.46, 360))
+                            .clipShape(RoundedRectangle(cornerRadius: 9))
+                            .shadow(color: .black.opacity(0.24), radius: 20, y: 12)
+                            .padding(.top, 28)
+
+                        Spacer()
+
+                        RewardCarloBubble(
+                            boldLead: "Fun fact:",
+                            message: artwork.artworkDescription
+                        )
+                        .padding(.horizontal, 22)
+                        .padding(.bottom, 22)
+
+                        RewardNextButton {
                             game.continueAfterArtworkReveal(for: artwork)
                         }
-
-                        Button {
-                            game.openGallery()
-                        } label: {
-                            Label("Apri galleria", systemImage: "book.pages")
-                                .font(.headline)
-                                .foregroundStyle(Color(red: 0.49, green: 0.19, blue: 0.62))
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
-                        }
-                        .buttonStyle(.plain)
+                        .padding(.bottom, 28)
                     }
-                    .padding(24)
+                    .frame(width: proxy.size.width, height: proxy.size.height)
                 }
             } else {
-                ContentUnavailableView("Quadro non trovato", systemImage: "questionmark.circle")
+                ContentUnavailableView("Artwork not found", systemImage: "questionmark.circle")
             }
         }
         .navigationBarBackButtonHidden()
     }
 }
 
-private struct UnlockedArtworkCard: View {
-    let artwork: ArtworkTarget
+struct PhraseProgressView: View {
+    let slots: [String?]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            FullArtworkImage(artwork: artwork)
-                .frame(maxWidth: .infinity)
-                .aspectRatio(1, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(artwork.title)
-                    .font(.title2.bold())
-                    .foregroundStyle(Color(red: 0.18, green: 0.12, blue: 0.23))
-
-                Text(artwork.artist)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(Color(red: 0.49, green: 0.19, blue: 0.62))
-
-                Text(artwork.artworkDescription)
-                    .font(.body)
-                    .foregroundStyle(Color(red: 0.23, green: 0.21, blue: 0.25))
-                    .fixedSize(horizontal: false, vertical: true)
+        HStack(spacing: 8) {
+            ForEach(Array(slots.enumerated()), id: \.offset) { _, word in
+                Text(word ?? "...")
+                    .font(.system(size: 13, weight: .black, design: .rounded))
+                    .foregroundStyle(word == nil ? Color(red: 0.52, green: 0.50, blue: 0.56) : .white)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.62)
+                    .frame(maxWidth: .infinity, minHeight: 36)
+                    .background(
+                        RoundedRectangle(cornerRadius: 7)
+                            .fill(word == nil ? Color.white.opacity(0.90) : GameTheme.wordGreen)
+                    )
             }
         }
-        .padding(14)
-        .background(.white.opacity(0.82))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+private struct RewardCarloBubble: View {
+    let boldLead: String
+    let message: String
+
+    var body: some View {
+        HStack(spacing: 10) {
+            CarloBadge()
+                .frame(width: 58, height: 58)
+
+            Text(attributedMessage)
+                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                .foregroundStyle(GameTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(GameTheme.cream)
+                )
+        }
+    }
+
+    private var attributedMessage: AttributedString {
+        var result = AttributedString("\(boldLead) \(message)")
+        if let range = result.range(of: boldLead) {
+            result[range].font = .system(size: 13, weight: .black, design: .rounded)
+        }
+        return result
+    }
+}
+
+private struct CarloBadge: View {
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(Color(red: 0.96, green: 0.70, blue: 0.06))
+
+            Circle()
+                .fill(Color(red: 1.0, green: 0.92, blue: 0.82))
+                .frame(width: 42, height: 42)
+                .offset(y: -3)
+
+            Circle()
+                .fill(Color(red: 1.0, green: 0.66, blue: 0.36))
+                .frame(width: 31, height: 31)
+                .offset(y: 2)
+
+            HStack(spacing: 8) {
+                Capsule()
+                    .fill(Color(red: 0.02, green: 0.05, blue: 0.08))
+                    .frame(width: 5, height: 13)
+
+                Capsule()
+                    .fill(Color(red: 0.02, green: 0.05, blue: 0.08))
+                    .frame(width: 5, height: 13)
+            }
+            .offset(y: -1)
+
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(red: 0.02, green: 0.28, blue: 0.78))
+                .frame(width: 28, height: 18)
+                .offset(y: 28)
+        }
+    }
+}
+
+private struct RewardNextButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        GoldCircleButton(systemImage: "chevron.right", accessibilityLabel: "Continue", action: action)
     }
 }
 
@@ -142,7 +232,6 @@ private struct FullArtworkImage: View {
         if let imageAssetName = artwork.imageAssetName {
             Image(imageAssetName)
                 .resizable()
-                .scaledToFill()
         } else {
             ZStack {
                 LinearGradient(
@@ -159,7 +248,7 @@ private struct FullArtworkImage: View {
                     Image(systemName: "photo.artframe")
                         .font(.system(size: 52, weight: .semibold))
 
-                    Text("Opera completa")
+                    Text("Artwork")
                         .font(.headline)
 
                     Text(artwork.title)

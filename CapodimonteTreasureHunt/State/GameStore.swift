@@ -36,7 +36,11 @@ final class GameStore: ObservableObject {
 
     var displayName: String {
         let trimmedName = playerName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedName.isEmpty ? "esploratore" : trimmedName
+        return trimmedName.isEmpty ? "Explorer" : trimmedName
+    }
+
+    var hasAnyProgress: Bool {
+        progressByMissionID.values.contains { !$0.unlockedArtworkIDs.isEmpty }
     }
 
     var activeMission: MissionCollection? {
