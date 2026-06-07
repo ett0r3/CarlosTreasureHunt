@@ -47,11 +47,13 @@ struct MissionGalleryView: View {
                                 MissionCollectionCard(
                                     mission: mission,
                                     progressText: game.progressText(for: mission),
+                                    isAvailable: game.canOpenMission(mission),
                                     isStarted: game.completedCount(for: mission) > 0,
                                     isCompleted: game.isMissionCompleted(mission)
                                 )
                             }
                             .buttonStyle(.plain)
+                            .disabled(!game.canOpenMission(mission))
                         }
                     }
                     .padding(.horizontal, 22)
@@ -80,7 +82,10 @@ struct MissionDetailView: View {
         ZStack {
             PurpleGameBackground()
 
-            if let mission = game.mission(with: missionID) {
+            if
+                let mission = game.mission(with: missionID),
+                game.canOpenMission(mission)
+            {
                 VStack(spacing: 16) {
                     GalleryHeader(
                         title: mission.title,
@@ -124,7 +129,7 @@ struct MissionDetailView: View {
                     }
                 }
             } else {
-                ContentUnavailableView("Mission not found", systemImage: "questionmark.circle")
+                ContentUnavailableView("Mission unavailable", systemImage: "lock.fill")
             }
         }
         .navigationTitle("")
@@ -200,6 +205,7 @@ private struct MissionStars: View {
 private struct MissionCollectionCard: View {
     let mission: MissionCollection
     let progressText: String
+    let isAvailable: Bool
     let isStarted: Bool
     let isCompleted: Bool
 
@@ -209,7 +215,7 @@ private struct MissionCollectionCard: View {
                 RoundedRectangle(cornerRadius: 7)
                     .fill(
                         LinearGradient(
-                            colors: isStarted ? [
+                            colors: isAvailable ? [
                                 Color(red: 1.0, green: 0.82, blue: 0.12),
                                 Color(red: 0.86, green: 0.62, blue: 0.08)
                             ] : [
@@ -221,7 +227,7 @@ private struct MissionCollectionCard: View {
                         )
                     )
 
-                if isStarted {
+                if isAvailable {
                     GalleryThumbnailPlaceholder(title: mission.title)
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                         .padding(6)
@@ -239,7 +245,7 @@ private struct MissionCollectionCard: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
 
-            Text(isCompleted ? "Complete" : progressText)
+            Text(isCompleted ? "Complete" : (isStarted ? progressText : "Ready"))
                 .font(.system(size: 11, weight: .bold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.78))
         }
@@ -253,23 +259,27 @@ private struct MissionArtworkCard: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 7)
-                    .fill(Color.white.opacity(isUnlocked || isCurrent ? 0.18 : 0.12))
+            GeometryReader { proxy in
+                ZStack {
+                    RoundedRectangle(cornerRadius: 7)
+                        .fill(Color.white.opacity(isUnlocked || isCurrent ? 0.18 : 0.12))
 
-                if isUnlocked || isCurrent {
-                    GalleryArtworkImage(artwork: artwork)
-                        .scaledToFill()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
-                        .saturation(isUnlocked ? 1 : 0.15)
-                        .opacity(isUnlocked ? 1 : 0.72)
-                } else {
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 42, weight: .black))
-                        .foregroundStyle(Color(red: 0.30, green: 0.12, blue: 0.88))
+                    if isUnlocked || isCurrent {
+                        GalleryArtworkImage(artwork: artwork)
+                            .scaledToFill()
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                            .clipped()
+                            .saturation(isUnlocked ? 1 : 0.15)
+                            .opacity(isUnlocked ? 1 : 0.72)
+                    } else {
+                        Image(systemName: "lock.fill")
+                            .font(.system(size: 42, weight: .black))
+                            .foregroundStyle(Color(red: 0.30, green: 0.12, blue: 0.88))
+                    }
                 }
+                .clipShape(RoundedRectangle(cornerRadius: 7))
             }
+            .frame(maxWidth: .infinity)
             .aspectRatio(0.84, contentMode: .fit)
             .overlay(alignment: .topLeading) {
                 if isCurrent {
@@ -293,6 +303,7 @@ private struct MissionArtworkCard: View {
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity, minHeight: 18, maxHeight: 18)
         }
     }
 }
@@ -330,6 +341,24 @@ private struct GalleryArtworkImage: View {
                 .resizable()
         } else {
             GalleryThumbnailPlaceholder(title: artwork.title)
+        }
+    }
+}
+
+struct HuntMapView_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            NavigationStack {
+                MissionGalleryView()
+            }
+            .environmentObject(PreviewSupport.game)
+            .previewDisplayName("Mission Gallery")
+
+            NavigationStack {
+                MissionDetailView(missionID: PreviewSupport.firstMission.id)
+            }
+            .environmentObject(PreviewSupport.game)
+            .previewDisplayName("Mission Detail")
         }
     }
 }

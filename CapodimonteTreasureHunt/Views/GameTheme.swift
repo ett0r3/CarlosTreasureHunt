@@ -113,3 +113,22 @@ struct GameSparkles: View {
         }
     }
 }
+
+struct GameTheme_Previews: PreviewProvider {
+    static var previews: some View {
+        ZStack {
+            PurpleGameBackground(raysOpacity: 0.18)
+
+            VStack(spacing: 24) {
+                Text("Carlo's Treasure Hunt")
+                    .font(.system(size: 28, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+
+                GoldCircleButton(
+                    systemImage: "chevron.right",
+                    accessibilityLabel: "Continue"
+                ) {}
+            }
+        }
+    }
+}

@@ -24,7 +24,10 @@ struct ContentView: View {
                     case .target(let artworkID):
                         TargetDetailView(artworkID: artworkID)
                     case .scanner(let artworkID):
-                        ARScannerView(artworkID: artworkID)
+                        ARScannerView(
+                            artworkID: artworkID,
+                            showsTutorial: game.shouldShowScannerTutorial
+                        )
                     case .wordReveal(let artworkID):
                         WordRevealView(artworkID: artworkID)
                     case .artworkReveal(let artworkID):
@@ -39,14 +42,26 @@ struct ContentView: View {
 
 private struct HomeView: View {
     @EnvironmentObject private var game: GameStore
+    @State private var showsResetConfirmation = false
 
     var body: some View {
         ZStack {
-            HomeBackground()
+            Color(red: 0.10, green: 0.18, blue: 0.56)
+                .ignoresSafeArea()
 
             GeometryReader { proxy in
-                let width = proxy.size.width
-                let artSize = min(width * 1.34, 560)
+                let fullWidth = proxy.size.width + proxy.safeAreaInsets.leading + proxy.safeAreaInsets.trailing
+                let fullHeight = proxy.size.height + proxy.safeAreaInsets.top + proxy.safeAreaInsets.bottom
+
+                Image("carlo-intro0")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: fullWidth, height: fullHeight)
+                    .clipped()
+                    .position(
+                        x: (proxy.size.width + proxy.safeAreaInsets.trailing - proxy.safeAreaInsets.leading) / 2,
+                        y: (proxy.size.height + proxy.safeAreaInsets.bottom - proxy.safeAreaInsets.top) / 2
+                    )
 
                 VStack(spacing: 0) {
                     Text("Carlo's\nTreasure\nHunt")
@@ -58,29 +73,49 @@ private struct HomeView: View {
                         .padding(.top, 42)
                         .minimumScaleFactor(0.72)
 
-                    Spacer(minLength: 8)
+                    Spacer()
 
-                    ZStack {
-                        Circle()
-                            .fill(Color(red: 1.0, green: 0.93, blue: 0.80))
-                            .frame(width: artSize * 0.56, height: artSize * 0.56)
-                            .offset(x: artSize * 0.12, y: -artSize * 0.06)
-
-                        HomeCarloPlaceholder()
-                            .frame(width: artSize, height: artSize * 0.88)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.bottom, -28)
-
-                    HomeActions(showGallery: game.hasAnyProgress)
+                    HomeActions(showGallery: game.canAccessGallery)
                         .padding(.bottom, 30)
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height)
+            }
+
+            if DeveloperToolsConfiguration.isResetButtonEnabled {
+                VStack {
+                    HStack {
+                        Spacer()
+
+                        Button {
+                            showsResetConfirmation = true
+                        } label: {
+                            Image(systemName: "arrow.counterclockwise")
+                                .font(.system(size: 17, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 40, height: 40)
+                                .background(Circle().fill(.black.opacity(0.34)))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Reset test data")
+                    }
+
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
             }
         }
         .navigationTitle("")
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
+        .alert("Reset all game data?", isPresented: $showsResetConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Reset", role: .destructive) {
+                game.resetAllGameDataForTesting()
+            }
+        } message: {
+            Text("This removes the player name, mission progress and completed tutorials.")
+        }
     }
 }
 
@@ -131,118 +166,9 @@ private struct HomeCircleButton: View {
     }
 }
 
-private struct HomeBackground: View {
-    var body: some View {
-        LinearGradient(
-            colors: [
-                Color(red: 0.42, green: 0.25, blue: 0.78),
-                Color(red: 0.10, green: 0.18, blue: 0.56),
-                Color(red: 0.02, green: 0.20, blue: 0.76)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
-        .overlay {
-            SparkleField()
-                .opacity(0.55)
-        }
-        .ignoresSafeArea()
-    }
-}
-
-private struct HomeCarloPlaceholder: View {
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(Color(red: 0.10, green: 0.12, blue: 0.16), lineWidth: 12)
-                .frame(width: 250, height: 250)
-                .rotationEffect(.degrees(-8))
-                .offset(x: -12, y: -46)
-
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(red: 0.10, green: 0.12, blue: 0.16))
-                .frame(width: 22, height: 150)
-                .rotationEffect(.degrees(-34))
-                .offset(x: -116, y: 118)
-
-            Circle()
-                .fill(Color(red: 1.0, green: 0.67, blue: 0.36))
-                .frame(width: 206, height: 206)
-                .overlay(alignment: .topLeading) {
-                    Circle()
-                        .fill(.white.opacity(0.25))
-                        .frame(width: 74, height: 74)
-                        .offset(x: 28, y: 18)
-                }
-                .offset(x: -14, y: -48)
-
-            HStack(spacing: 62) {
-                Capsule()
-                    .fill(Color(red: 0.02, green: 0.05, blue: 0.08))
-                    .frame(width: 26, height: 58)
-
-                Capsule()
-                    .fill(Color(red: 0.02, green: 0.05, blue: 0.08))
-                    .frame(width: 30, height: 70)
-            }
-            .offset(x: -8, y: -55)
-
-            Capsule()
-                .fill(Color(red: 0.99, green: 0.92, blue: 0.80))
-                .frame(width: 300, height: 106)
-                .offset(x: -8, y: -164)
-
-            RoundedRectangle(cornerRadius: 34)
-                .fill(Color(red: 0.02, green: 0.28, blue: 0.78))
-                .frame(width: 254, height: 220)
-                .overlay(alignment: .trailing) {
-                    Rectangle()
-                        .fill(Color(red: 0.94, green: 0.12, blue: 0.09))
-                        .frame(width: 54)
-                }
-                .clipShape(RoundedRectangle(cornerRadius: 34))
-                .offset(x: 62, y: 188)
-
-            Circle()
-                .fill(Color(red: 1.0, green: 0.78, blue: 0.02))
-                .frame(width: 28, height: 28)
-                .offset(x: 72, y: 146)
-
-            Circle()
-                .fill(Color(red: 1.0, green: 0.78, blue: 0.02))
-                .frame(width: 20, height: 20)
-                .offset(x: 112, y: 188)
-        }
-    }
-}
-
-private struct SparkleField: View {
-    private let sparkles: [(x: CGFloat, y: CGFloat, size: CGFloat)] = [
-        (0.12, 0.17, 7), (0.86, 0.12, 5), (0.22, 0.33, 4),
-        (0.74, 0.39, 7), (0.13, 0.55, 5), (0.89, 0.61, 4),
-        (0.20, 0.78, 7), (0.78, 0.82, 5), (0.50, 0.20, 4)
-    ]
-
-    var body: some View {
-        GeometryReader { proxy in
-            ForEach(sparkles.indices, id: \.self) { index in
-                let sparkle = sparkles[index]
-
-                Image(systemName: "sparkle")
-                    .font(.system(size: sparkle.size, weight: .bold))
-                    .foregroundStyle(Color(red: 1.0, green: 0.95, blue: 0.78))
-                    .position(
-                        x: proxy.size.width * sparkle.x,
-                        y: proxy.size.height * sparkle.y
-                    )
-            }
-        }
-    }
-}
-
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
         ContentView()
-            .environmentObject(GameStore())
+            .environmentObject(PreviewSupport.game)
     }
 }

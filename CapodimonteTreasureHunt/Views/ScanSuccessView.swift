@@ -261,3 +261,29 @@ private struct FullArtworkImage: View {
         }
     }
 }
+
+struct ScanSuccessView_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            NavigationStack {
+                WordRevealView(artworkID: PreviewSupport.firstArtwork.id)
+            }
+            .environmentObject(PreviewSupport.game)
+            .previewDisplayName("Word Reveal")
+
+            NavigationStack {
+                ArtworkRevealView(artworkID: PreviewSupport.firstArtwork.id)
+            }
+            .environmentObject(PreviewSupport.game)
+            .previewDisplayName("Artwork Reveal")
+
+            ZStack {
+                PurpleGameBackground()
+
+                PhraseProgressView(slots: ["THE", nil, "SECRET", nil, "WORD"])
+                    .padding(24)
+            }
+            .previewDisplayName("Phrase Progress")
+        }
+    }
+}

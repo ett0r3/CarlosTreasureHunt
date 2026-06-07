@@ -31,39 +31,39 @@ extension MissionCollection {
     static let capodimonteDemo: [MissionCollection] = [
         demoMission(
             idNumber: 1,
-            title: "Missione 1",
-            summary: "Cinque dettagli per imparare a guardare un'opera come un esploratore.",
-            words: ["L'arte", "rivela", "segreti", "a", "te"]
+            title: "Mission 1",
+            summary: "Five details that teach you to observe an artwork like an explorer.",
+            words: ["Art", "reveals", "secrets", "to", "you"]
         ),
         demoMission(
             idNumber: 2,
-            title: "Missione 2",
-            summary: "Una collezione dedicata alla luce, ai passaggi e ai piccoli segnali.",
-            words: ["Ogni", "quadro", "nasconde", "una", "luce"]
+            title: "Mission 2",
+            summary: "A collection dedicated to light, passages and subtle clues.",
+            words: ["Every", "painting", "hides", "a", "light"]
         ),
         demoMission(
             idNumber: 3,
-            title: "Missione 3",
-            summary: "Un percorso tra gesti, sguardi e indizi lasciati nelle figure.",
-            words: ["Guarda", "bene", "troverai", "la", "chiave"]
+            title: "Mission 3",
+            summary: "A journey through gestures, glances and clues hidden among the figures.",
+            words: ["Look", "closely", "find", "the", "key"]
         ),
         demoMission(
             idNumber: 4,
-            title: "Missione 4",
-            summary: "Cinque opere per scoprire come i dettagli cambiano una storia.",
-            words: ["I", "dettagli", "aprono", "nuove", "storie"]
+            title: "Mission 4",
+            summary: "Five artworks that reveal how details can change a story.",
+            words: ["Details", "open", "up", "new", "stories"]
         ),
         demoMission(
             idNumber: 5,
-            title: "Missione 5",
-            summary: "Una caccia visiva fatta di colori, simboli e tracce nascoste.",
-            words: ["Segui", "il", "colore", "senza", "fretta"]
+            title: "Mission 5",
+            summary: "A visual hunt through colors, symbols and hidden traces.",
+            words: ["Follow", "the", "colors", "without", "rushing"]
         ),
         demoMission(
             idNumber: 6,
-            title: "Missione 6",
-            summary: "La collezione finale collega tutte le scoperte del museo.",
-            words: ["Capodimonte", "custodisce", "tesori", "per", "tutti"]
+            title: "Mission 6",
+            summary: "The final collection connects all the discoveries in the museum.",
+            words: ["Capodimonte", "keeps", "treasures", "for", "everyone"]
         )
     ]
 
@@ -83,16 +83,23 @@ extension MissionCollection {
                 let artworkAssetName = idNumber == 1 ? "Artwork\(order)" : nil
                 let detailAssetName = idNumber == 1 ? "Detail\(order)" : nil
                 let coreMLLabel = idNumber == 1 ? "Artwork\(order)" : "target"
+                let artworkContent = idNumber == 1
+                    ? firstMissionArtworkContent[order - 1]
+                    : DemoArtworkContent(
+                        title: "Artwork \(order)",
+                        artist: "Capodimonte",
+                        funFact: "Placeholder artwork for \(title.lowercased()). The complete description of the unlocked artwork will appear here when the final museum content is available."
+                    )
 
                 return ArtworkTarget(
                     id: demoUUID(idNumber * 100 + order),
-                    title: "Opera \(order)",
-                    artist: "Capodimonte",
+                    title: artworkContent.title,
+                    artist: artworkContent.artist,
                     galleryName: title,
-                    artworkDescription: "Opera placeholder della \(title.lowercased()). Quando avrai i contenuti reali, qui andra la descrizione completa del quadro sbloccato.",
-                    targetTitle: "Dettaglio \(order)",
-                    targetDescription: "Inquadra il dettaglio \(order) con la fotocamera per sbloccare il quadro e una parola della frase.",
-                    narratorPrompt: "Cerca il dettaglio \(order): e il prossimo passo della collezione.",
+                    artworkDescription: artworkContent.funFact,
+                    targetTitle: "Detail \(order)",
+                    targetDescription: "Frame detail \(order) with the camera to unlock the artwork and one word of the secret phrase.",
+                    narratorPrompt: "Find detail \(order): it is the next step in this collection.",
                     unlockedWord: word,
                     order: order,
                     imageAssetName: artworkAssetName,
@@ -103,7 +110,41 @@ extension MissionCollection {
         )
     }
 
+    private static let firstMissionArtworkContent: [DemoArtworkContent] = [
+        DemoArtworkContent(
+            title: "Madonna col Bambino e due angeli",
+            artist: "Sandro Botticelli",
+            funFact: "Did you know? Botticelli was not his real last name: the painter's name was Alessandro Filipepi! \"Botticelli\" was a family nickname."
+        ),
+        DemoArtworkContent(
+            title: "Ritratto del cardinale Alessandro Farnese, futuro papa Paolo III",
+            artist: "Raffaello Sanzio",
+            funFact: "Alessandro Farnese became cardinal at just 14 years old!"
+        ),
+        DemoArtworkContent(
+            title: "Flowers, Fruit with a Woman Picking Grapes",
+            artist: "Christian Berentz and Carlo Maratta",
+            funFact: "This painting is the work of two artists: Berentz painted the fruit and flowers, while the woman was created by Carlo Maratta!"
+        ),
+        DemoArtworkContent(
+            title: "Misantropo",
+            artist: "Pieter Bruegel il Vecchio",
+            funFact: "Look closely: the misanthrope thinks he is wise, but he is the only one who doesn't notice the theft."
+        ),
+        DemoArtworkContent(
+            title: "Danae",
+            artist: "Tiziano Vecellio",
+            funFact: "Did you know? During World War II, this work was stolen by the Nazis and found in a salt mine in Austria!"
+        )
+    ]
+
     private static func demoUUID(_ number: Int) -> UUID {
         UUID(uuidString: String(format: "00000000-0000-0000-0000-%012d", number))!
     }
+}
+
+private struct DemoArtworkContent {
+    let title: String
+    let artist: String
+    let funFact: String
 }

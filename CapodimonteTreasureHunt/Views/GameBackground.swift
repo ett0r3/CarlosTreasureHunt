@@ -19,3 +19,9 @@ struct GameBackground: View {
         .ignoresSafeArea()
     }
 }
+
+struct GameBackground_Previews: PreviewProvider {
+    static var previews: some View {
+        GameBackground()
+    }
+}

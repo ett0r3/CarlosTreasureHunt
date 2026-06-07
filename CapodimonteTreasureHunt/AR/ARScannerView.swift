@@ -4,6 +4,7 @@
 //
 
 import ARKit
+import Combine
 import SceneKit
 import SwiftUI
 import Vision
@@ -11,15 +12,57 @@ import Vision
 struct ARScannerView: View {
     @EnvironmentObject private var game: GameStore
     @Namespace private var swapNamespace
-    @State private var showsReferenceImage = false
+    @State private var showsReferenceImage: Bool
     @State private var isSwapBubbleDipped = false
-    @State private var tutorialStep: ScannerTutorialStep = .lens
-    @State private var hasCompletedTutorialInCurrentSession = false
+    @State private var tutorialStage: ARTutorialStage
     @State private var didCompleteRecognition = false
+    @State private var recognitionStartedAt: Date?
+    @State private var lastMatchingRecognitionAt: Date?
+    @State private var recognitionProgress = 0.0
     let artworkID: UUID
+    private let usesLiveCamera: Bool
+    private let recognitionTimer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
+
+    private static let requiredRecognitionDuration: TimeInterval = 4
+    private static let recognitionFreshnessInterval: TimeInterval = 0.75
+
+    init(
+        artworkID: UUID,
+        usesLiveCamera: Bool = true,
+        showsTutorial: Bool = true,
+        previewTutorialStep: Int? = nil
+    ) {
+        self.artworkID = artworkID
+        self.usesLiveCamera = usesLiveCamera
+
+        let initialStage: ARTutorialStage
+        switch previewTutorialStep {
+        case 1:
+            initialStage = .cameraHint
+        case 2:
+            initialStage = .referenceHint
+        case 3:
+            initialStage = .ready
+        case 4:
+            initialStage = .completed
+        default:
+            initialStage = showsTutorial ? .find : .completed
+        }
+
+        _tutorialStage = State(initialValue: initialStage)
+        _showsReferenceImage = State(
+            initialValue: initialStage != .referenceHint
+        )
+    }
 
     private var isShowingTutorial: Bool {
-        !hasCompletedTutorialInCurrentSession
+        tutorialStage != .completed
+    }
+
+    private var isSwapEnabled: Bool {
+        tutorialStage == .cameraHint ||
+        tutorialStage == .referenceHint ||
+        tutorialStage == .completed
     }
 
     var body: some View {
@@ -30,12 +73,19 @@ struct ARScannerView: View {
                         ReferenceScannerSurface(artwork: artwork)
                             .matchedGeometryEffect(id: "scannerSurface", in: swapNamespace)
                             .transition(.opacity.combined(with: .scale(scale: 0.985)))
-                    } else {
+                    } else if usesLiveCamera {
                         ARSceneView(artwork: artwork) { result in
                             handleRecognitionResult(result, for: artwork)
                         }
                             .matchedGeometryEffect(id: "scannerSurface", in: swapNamespace)
                             .transition(.opacity.combined(with: .scale(scale: 1.015)))
+                    } else {
+                        Color.black
+                            .overlay {
+                                Image(systemName: "camera.viewfinder")
+                                    .font(.system(size: 72, weight: .thin))
+                                    .foregroundStyle(.white.opacity(0.35))
+                            }
                     }
                 }
                 .ignoresSafeArea()
@@ -44,254 +94,340 @@ struct ARScannerView: View {
                     artwork: artwork,
                     showsReferenceImage: showsReferenceImage,
                     isSwapBubbleDipped: isSwapBubbleDipped,
+                    isSwapEnabled: isSwapEnabled,
+                    isSwapHighlighted: tutorialStage == .cameraHint || tutorialStage == .referenceHint,
                     namespace: swapNamespace
                 ) {
-                    swapReferenceView()
+                    handleSwapButtonTap()
                 }
-                .allowsHitTesting(!isShowingTutorial || tutorialStep == .swap)
                 .ignoresSafeArea()
+
+                if tutorialStage == .completed && !showsReferenceImage && !didCompleteRecognition {
+                    ScannerRecognitionFeedback(progress: recognitionProgress)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             } else {
                 ARSceneView(artwork: nil) { _ in }
                     .ignoresSafeArea()
             }
 
             if isShowingTutorial {
-                if tutorialStep == .ready {
+                switch tutorialStage {
+                case .find:
+                    FindTargetTutorialOverlay {
+                        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                            tutorialStage = .cameraHint
+                        }
+                    }
+                    .ignoresSafeArea()
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+
+                case .cameraHint:
+                    NumberedARTutorialOverlay(
+                        number: 1,
+                        message: "Tap this button to open the camera and scan the hidden detail."
+                    )
+                    .allowsHitTesting(false)
+                    .ignoresSafeArea()
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+
+                case .referenceHint:
+                    NumberedARTutorialOverlay(
+                        number: 2,
+                        message: "Press this button whenever you need to view the reference image again."
+                    )
+                    .allowsHitTesting(false)
+                    .ignoresSafeArea()
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+
+                case .ready:
                     ScannerReadyOverlay {
-                        advanceTutorial()
+                        beginGame()
                     }
                     .ignoresSafeArea()
                     .transition(.opacity.combined(with: .scale(scale: 0.98)))
-                } else {
-                    ScannerTutorialOverlay(step: tutorialStep) {
-                        advanceTutorial()
-                    }
-                    .ignoresSafeArea()
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+
+                case .completed:
+                    EmptyView()
                 }
+            }
+
+            if DeveloperToolsConfiguration.isSkipScanButtonEnabled && !didCompleteRecognition {
+                VStack {
+                    HStack {
+                        Spacer()
+
+                        Button {
+                            skipScanForTesting()
+                        } label: {
+                            Label("Skip scan", systemImage: "forward.end.fill")
+                                .font(.system(size: 13, weight: .black, design: .rounded))
+                                .foregroundStyle(GameTheme.ink)
+                                .padding(.horizontal, 14)
+                                .frame(height: 40)
+                                .background(
+                                    Capsule()
+                                        .fill(GameTheme.gold)
+                                        .shadow(color: .black.opacity(0.20), radius: 8, y: 4)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Skip artwork scan")
+                    }
+
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
             }
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        .onReceive(recognitionTimer) { now in
+            updateRecognitionProgress(at: now)
+        }
     }
 
-    private func swapReferenceView() {
+    private func handleSwapButtonTap() {
+        switch tutorialStage {
+        case .cameraHint:
+            performSwap(toReference: false) {
+                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                    tutorialStage = .referenceHint
+                }
+            }
+        case .referenceHint:
+            performSwap(toReference: true) {
+                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
+                    tutorialStage = .ready
+                }
+            }
+        case .completed:
+            performSwap(toReference: !showsReferenceImage)
+        case .find, .ready:
+            break
+        }
+    }
+
+    private func beginGame() {
+        game.completeScannerTutorial()
+        tutorialStage = .completed
+        performSwap(toReference: false)
+    }
+
+    private func performSwap(
+        toReference: Bool,
+        completion: @escaping () -> Void = {}
+    ) {
+        if toReference {
+            resetRecognitionProgress()
+        }
+
+        guard showsReferenceImage != toReference else {
+            completion()
+            return
+        }
+
         withAnimation(.easeInOut(duration: 0.16)) {
             isSwapBubbleDipped = true
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-            withAnimation(.easeInOut(duration: 0.28)) {
-                showsReferenceImage.toggle()
+            withAnimation(.linear(duration: 0.24)) {
+                showsReferenceImage = toReference
             }
         }
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-            withAnimation(.spring(response: 0.28, dampingFraction: 0.76)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.34) {
+            withAnimation(.easeOut(duration: 0.18)) {
                 isSwapBubbleDipped = false
             }
-        }
-    }
-
-    private func advanceTutorial() {
-        withAnimation(.interactiveSpring(response: 0.46, dampingFraction: 0.78, blendDuration: 0.08)) {
-            switch tutorialStep {
-            case .lens:
-                tutorialStep = .swap
-            case .swap:
-                tutorialStep = .ready
-            case .ready:
-                hasCompletedTutorialInCurrentSession = true
-            }
+            completion()
         }
     }
 
     private func handleRecognitionResult(_ result: ArtworkRecognitionResult?, for artwork: ArtworkTarget) {
-        guard let result else {
+        guard
+            tutorialStage == .completed,
+            !showsReferenceImage,
+            !didCompleteRecognition
+        else {
             return
         }
 
-        if ArtworkRecognitionService().matches(result, target: artwork) {
-            if !isShowingTutorial && !showsReferenceImage && !didCompleteRecognition {
-                didCompleteRecognition = true
-                game.completeScan(for: artwork)
+        guard
+            let result,
+            ArtworkRecognitionService().matches(result, target: artwork)
+        else {
+            resetRecognitionProgress()
+            return
+        }
+
+        let now = Date()
+
+        if recognitionStartedAt == nil {
+            recognitionStartedAt = now
+        }
+
+        lastMatchingRecognitionAt = now
+    }
+
+    private func updateRecognitionProgress(at now: Date) {
+        guard
+            tutorialStage == .completed,
+            !showsReferenceImage,
+            !didCompleteRecognition,
+            let recognitionStartedAt,
+            let lastMatchingRecognitionAt
+        else {
+            return
+        }
+
+        guard now.timeIntervalSince(lastMatchingRecognitionAt) <= Self.recognitionFreshnessInterval else {
+            resetRecognitionProgress()
+            return
+        }
+
+        let elapsed = now.timeIntervalSince(recognitionStartedAt)
+        recognitionProgress = min(elapsed / Self.requiredRecognitionDuration, 1)
+
+        if recognitionProgress >= 1, let artwork = game.artwork(with: artworkID) {
+            didCompleteRecognition = true
+            game.completeScan(for: artwork)
+        }
+    }
+
+    private func resetRecognitionProgress() {
+        recognitionStartedAt = nil
+        lastMatchingRecognitionAt = nil
+
+        withAnimation(.easeOut(duration: 0.16)) {
+            recognitionProgress = 0
+        }
+    }
+
+    private func skipScanForTesting() {
+        guard
+            !didCompleteRecognition,
+            let artwork = game.artwork(with: artworkID)
+        else {
+            return
+        }
+
+        resetRecognitionProgress()
+        didCompleteRecognition = true
+        game.completeScan(for: artwork)
+    }
+}
+
+private enum ARTutorialStage {
+    case find
+    case cameraHint
+    case referenceHint
+    case ready
+    case completed
+}
+
+private struct FindTargetTutorialOverlay: View {
+    let action: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            let lensCenterY = proxy.size.height / 2
+
+            ZStack {
+                Color(red: 0.12, green: 0.10, blue: 0.40)
+                    .opacity(0.20)
+                    .allowsHitTesting(false)
+
+                Button(action: action) {
+                    ZStack {
+                        Image("star")
+                            .resizable()
+                            .scaledToFit()
+
+                        Text("Find and frame\nthis element!")
+                            .font(.system(size: 25, weight: .black, design: .rounded))
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(Color(red: 0.13, green: 0.16, blue: 0.60))
+                            .minimumScaleFactor(0.72)
+                    }
+                }
+                .buttonStyle(.plain)
+                .frame(width: min(proxy.size.width * 0.96, 410))
+                .position(x: proxy.size.width / 2, y: lensCenterY)
+                .accessibilityLabel("Find and frame this element")
             }
         }
     }
 }
 
-private enum ScannerTutorialStep {
-    case lens
-    case swap
-    case ready
-}
-
-private struct ScannerTutorialOverlay: View {
-    let step: ScannerTutorialStep
-    let advanceAction: () -> Void
+private struct NumberedARTutorialOverlay: View {
+    let number: Int
+    let message: String
 
     var body: some View {
         GeometryReader { proxy in
-            let lensSize = min(proxy.size.width * 0.92, proxy.size.height * 0.54)
-            let lensCenterY = proxy.size.height * 0.48
-            let swapSize: CGFloat = 86
-            let swapCenterY = lensCenterY + (lensSize / 2) - (swapSize * 0.2)
-            let focusSize = step == .lens ? lensSize + 18 : swapSize + 20
-            let focusCenter = CGPoint(
-                x: proxy.size.width / 2,
-                y: step == .lens ? lensCenterY : swapCenterY
+            let lensSize = ScannerLensGeometry.lensSize(in: proxy.size)
+            let swapCenter = ScannerLensGeometry.swapCenter(
+                in: proxy.size,
+                lensSize: lensSize
             )
-            let bubbleY = bubbleCenterY(
-                for: step,
-                lensSize: lensSize,
-                lensCenterY: lensCenterY,
-                swapCenterY: swapCenterY,
-                screenHeight: proxy.size.height
-            )
+            let focusDiameter = ScannerLensGeometry.swapButtonSize + 44
+            let bubbleCenterY = max(150, swapCenter.y - 170)
 
             ZStack {
-                Color.black.opacity(0.42)
+                Color(red: 0.12, green: 0.10, blue: 0.40)
+                    .opacity(0.38)
                     .mask {
                         Rectangle()
                             .overlay {
                                 Circle()
-                                    .frame(width: focusSize, height: focusSize)
-                                    .position(focusCenter)
+                                    .frame(width: focusDiameter, height: focusDiameter)
+                                    .position(swapCenter)
                                     .blendMode(.destinationOut)
                             }
                     }
                     .compositingGroup()
-                    .allowsHitTesting(false)
 
-                TutorialFocusRing(size: focusSize, step: step)
-                    .position(focusCenter)
-                    .allowsHitTesting(false)
+                VStack(spacing: -18) {
+                    Text("\(number)")
+                        .font(.system(size: 42, weight: .black, design: .rounded))
+                        .foregroundStyle(Color(red: 0.17, green: 0.18, blue: 0.60))
+                        .frame(width: 70, height: 70)
+                        .background(
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color(red: 1.0, green: 0.98, blue: 0.87),
+                                            Color(red: 1.0, green: 0.78, blue: 0.24)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                        )
+                        .zIndex(1)
 
-                TutorialBubble(step: step, action: advanceAction)
-                    .frame(width: min(proxy.size.width - 32, 340))
-                    .position(x: proxy.size.width / 2, y: bubbleY)
+                    Text(message)
+                        .font(.system(size: 18, weight: .black, design: .rounded))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color(red: 0.05, green: 0.04, blue: 0.04))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 38)
+                        .padding(.bottom, 26)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color(red: 1.0, green: 0.95, blue: 0.88))
+                                .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
+                        )
+                }
+                .frame(width: min(proxy.size.width - 48, 310))
+                .position(x: proxy.size.width / 2, y: bubbleCenterY)
             }
-            .animation(.interactiveSpring(response: 0.46, dampingFraction: 0.78), value: step)
-        }
-    }
-
-    private func bubbleCenterY(
-        for step: ScannerTutorialStep,
-        lensSize: CGFloat,
-        lensCenterY: CGFloat,
-        swapCenterY: CGFloat,
-        screenHeight: CGFloat
-    ) -> CGFloat {
-        switch step {
-        case .lens:
-            return max(138, lensCenterY - (lensSize / 2) - 68)
-        case .swap:
-            return min(screenHeight - 178, swapCenterY + 122)
-        case .ready:
-            return screenHeight / 2
-        }
-    }
-}
-
-private struct TutorialFocusRing: View {
-    let size: CGFloat
-    let step: ScannerTutorialStep
-    @State private var isPulsing = false
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .strokeBorder(Color.white.opacity(0.9), lineWidth: 2)
-                .frame(width: size, height: size)
-
-            Circle()
-                .strokeBorder(Color.white.opacity(0.44), lineWidth: 1)
-                .frame(width: size + 10, height: size + 10)
-                .scaleEffect(isPulsing ? 1.05 : 0.98)
-                .opacity(isPulsing ? 0.18 : 0.58)
-        }
-        .onAppear {
-            withAnimation(.easeInOut(duration: 0.82).repeatForever(autoreverses: true)) {
-                isPulsing = true
-            }
-        }
-    }
-}
-
-private struct TutorialBubble: View {
-    let step: ScannerTutorialStep
-    let action: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Label(title, systemImage: iconName)
-                .font(.headline)
-                .foregroundStyle(Color(red: 0.18, green: 0.12, blue: 0.23))
-
-            Text(message)
-                .font(.body.weight(.semibold))
-                .foregroundStyle(Color(red: 0.18, green: 0.12, blue: 0.23))
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button(action: action) {
-                Text(buttonTitle)
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color(red: 0.18, green: 0.12, blue: 0.23))
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(16)
-        .background(.white.opacity(0.9))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .shadow(color: .black.opacity(0.16), radius: 14, y: 6)
-        .transition(.scale(scale: 0.92).combined(with: .opacity))
-    }
-
-    private var title: String {
-        switch step {
-        case .lens:
-            return "The lens"
-        case .swap:
-            return "Guide image"
-        case .ready:
-            return ""
-        }
-    }
-
-    private var iconName: String {
-        switch step {
-        case .lens:
-            return "viewfinder.circle"
-        case .swap:
-            return "arrow.triangle.2.circlepath"
-        case .ready:
-            return "sparkles"
-        }
-    }
-
-    private var message: String {
-        switch step {
-        case .lens:
-            return "Place the hidden detail inside the lens."
-        case .swap:
-            return "Tap this button whenever you need to see the guide image."
-        case .ready:
-            return ""
-        }
-    }
-
-    private var buttonTitle: String {
-        switch step {
-        case .lens:
-            return "Got it"
-        case .swap:
-            return "I'm ready"
-        case .ready:
-            return ""
         }
     }
 }
@@ -356,14 +492,20 @@ private struct MagnifyingScannerOverlay: View {
     let artwork: ArtworkTarget
     let showsReferenceImage: Bool
     let isSwapBubbleDipped: Bool
+    let isSwapEnabled: Bool
+    let isSwapHighlighted: Bool
     let namespace: Namespace.ID
     let swapAction: () -> Void
 
     var body: some View {
         GeometryReader { proxy in
-            let lensSize = min(proxy.size.width * 0.92, proxy.size.height * 0.54)
-            let lensCenterY = proxy.size.height * 0.48
-            let swapSize: CGFloat = 86
+            let lensSize = ScannerLensGeometry.lensSize(in: proxy.size)
+            let lensOpeningSize = lensSize * ScannerLensGeometry.openingRatio
+            let lensCenterY = proxy.size.height / 2
+            let swapCenter = ScannerLensGeometry.swapCenter(
+                in: proxy.size,
+                lensSize: lensSize
+            )
 
             ZStack {
                 Color(red: 0.48, green: 0.12, blue: 0.72)
@@ -372,7 +514,7 @@ private struct MagnifyingScannerOverlay: View {
                         Rectangle()
                             .overlay {
                                 Circle()
-                                    .frame(width: lensSize, height: lensSize)
+                                    .frame(width: lensOpeningSize, height: lensOpeningSize)
                                     .position(x: proxy.size.width / 2, y: lensCenterY)
                                     .blendMode(.destinationOut)
                             }
@@ -380,21 +522,23 @@ private struct MagnifyingScannerOverlay: View {
                     .compositingGroup()
                     .allowsHitTesting(false)
 
-                ScannerYellowLensChrome(lensSize: lensSize, lensCenterY: lensCenterY)
+                ScannerLensAsset(lensSize: lensSize, lensCenterY: lensCenterY)
                     .allowsHitTesting(false)
 
                 SwapPreviewButton(
                     artwork: artwork,
                     showsReferenceImage: showsReferenceImage,
                     isDipped: isSwapBubbleDipped,
+                    isEnabled: isSwapEnabled,
+                    isHighlighted: isSwapHighlighted,
                     namespace: namespace,
                     action: swapAction
                 )
-                .frame(width: swapSize, height: swapSize)
-                .position(
-                    x: proxy.size.width / 2,
-                    y: lensCenterY + (lensSize / 2) - (swapSize * 0.2)
+                .frame(
+                    width: ScannerLensGeometry.swapButtonSize,
+                    height: ScannerLensGeometry.swapButtonSize
                 )
+                .position(swapCenter)
             }
         }
         .animation(.easeInOut(duration: 0.22), value: showsReferenceImage)
@@ -402,50 +546,52 @@ private struct MagnifyingScannerOverlay: View {
     }
 }
 
-private struct ScannerYellowLensChrome: View {
+private enum ScannerLensGeometry {
+    static let assetWidth: CGFloat = 593
+    static let assetHeight: CGFloat = 809
+    static let circleCenterY: CGFloat = 295
+    static let outerRadius: CGFloat = 294.5
+    static let openingDiameter: CGFloat = 515
+    static let swapButtonSize: CGFloat = 86
+
+    static let assetAspectRatio = assetHeight / assetWidth
+    static let circleCenterOffsetRatio = (assetHeight / 2 - circleCenterY) / assetWidth
+    static let outerRadiusRatio = outerRadius / assetWidth
+    static let openingRatio = openingDiameter / assetWidth
+
+    static func lensSize(in size: CGSize) -> CGFloat {
+        min(size.width * 1.18, size.height * 0.64)
+    }
+
+    static func swapCenter(in size: CGSize, lensSize: CGFloat) -> CGPoint {
+        CGPoint(
+            x: size.width / 2,
+            y: (size.height / 2) +
+                (lensSize * outerRadiusRatio) -
+                (swapButtonSize * 0.2)
+        )
+    }
+}
+
+private struct ScannerLensAsset: View {
     let lensSize: CGFloat
     let lensCenterY: CGFloat
 
     var body: some View {
         GeometryReader { proxy in
-            let centerX = proxy.size.width / 2
-            let handleWidth = lensSize * 0.17
-            let handleHeight = lensSize * 0.56
-
-            ZStack {
-                Capsule()
-                    .fill(lensGradient)
-                    .frame(width: handleWidth, height: handleHeight)
-                    .rotationEffect(.degrees(32))
-                    .shadow(color: Color(red: 0.65, green: 0.44, blue: 0.08).opacity(0.34), radius: 16)
-                    .position(x: centerX - lensSize * 0.43, y: lensCenterY + lensSize * 0.55)
-
-                Circle()
-                    .strokeBorder(
-                        lensGradient,
-                        lineWidth: 22
-                    )
-                    .frame(width: lensSize, height: lensSize)
-                    .shadow(color: Color(red: 0.65, green: 0.44, blue: 0.08).opacity(0.40), radius: 17)
-                    .position(x: centerX, y: lensCenterY)
-
-                Circle()
-                    .strokeBorder(Color.white.opacity(0.30), lineWidth: 3)
-                    .frame(width: lensSize - 18, height: lensSize - 18)
-                    .position(x: centerX, y: lensCenterY)
-            }
+            Image("lente")
+                .resizable()
+                .renderingMode(.original)
+                .scaledToFit()
+                .frame(
+                    width: lensSize,
+                    height: lensSize * ScannerLensGeometry.assetAspectRatio
+                )
+                .position(
+                    x: proxy.size.width / 2,
+                    y: lensCenterY + lensSize * ScannerLensGeometry.circleCenterOffsetRatio
+                )
         }
-    }
-
-    private var lensGradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                Color(red: 1.0, green: 0.88, blue: 0.33),
-                Color(red: 0.96, green: 0.65, blue: 0.06)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
     }
 }
 
@@ -453,6 +599,8 @@ private struct SwapPreviewButton: View {
     let artwork: ArtworkTarget
     let showsReferenceImage: Bool
     let isDipped: Bool
+    let isEnabled: Bool
+    let isHighlighted: Bool
     let namespace: Namespace.ID
     let action: () -> Void
 
@@ -470,7 +618,15 @@ private struct SwapPreviewButton: View {
                             endPoint: .bottom
                         )
                     )
-                    .shadow(color: Color(red: 0.60, green: 0.18, blue: 1.0).opacity(isDipped ? 0.12 : 0.36), radius: isDipped ? 5 : 14, y: isDipped ? 2 : 8)
+                    .shadow(
+                        color: Color.white.opacity(isHighlighted ? 0.82 : 0),
+                        radius: isHighlighted ? 18 : 0
+                    )
+                    .shadow(
+                        color: Color(red: 0.60, green: 0.18, blue: 1.0).opacity(isDipped ? 0.12 : 0.36),
+                        radius: isDipped ? 5 : 14,
+                        y: isDipped ? 2 : 8
+                    )
 
                 if showsReferenceImage {
                     Image(systemName: "camera.viewfinder")
@@ -489,7 +645,9 @@ private struct SwapPreviewButton: View {
             .opacity(isDipped ? 0.46 : 1)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(showsReferenceImage ? "Back to camera" : "Show guide image")
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.44)
+        .accessibilityLabel(showsReferenceImage ? "Open camera" : "Show reference image")
     }
 }
 
@@ -498,9 +656,9 @@ private struct ReferenceScannerSurface: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let lensSize = min(proxy.size.width * 0.92, proxy.size.height * 0.54)
-            let lensCenterY = proxy.size.height * 0.48
-            let referenceSize = lensSize * 0.88
+            let lensSize = ScannerLensGeometry.lensSize(in: proxy.size)
+            let lensCenterY = proxy.size.height / 2
+            let referenceSize = lensSize * ScannerLensGeometry.openingRatio
 
             ZStack {
                 ReferenceArtworkImage(artwork: artwork)
@@ -532,6 +690,39 @@ private struct ReferenceScannerSurface: View {
                     .position(x: proxy.size.width / 2, y: max(72, lensCenterY - (lensSize / 2) - 34))
             }
         }
+    }
+}
+
+private struct ScannerRecognitionFeedback: View {
+    let progress: Double
+
+    var body: some View {
+        VStack {
+            Spacer()
+
+            VStack(spacing: 9) {
+                Text(progress > 0 ? "Keep the detail inside the lens" : "Frame the hidden detail")
+                    .font(.system(size: 14, weight: .black, design: .rounded))
+                    .foregroundStyle(.white)
+
+                Text("Hold steady for 4 seconds")
+                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.78))
+
+                ProgressView(value: progress)
+                    .tint(Color(red: 1.0, green: 0.72, blue: 0.0))
+                    .scaleEffect(x: 1, y: 1.8)
+                    .animation(.linear(duration: 0.08), value: progress)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 14)
+            .frame(maxWidth: 310)
+            .background(.black.opacity(0.58))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 28)
+            .padding(.bottom, 34)
+        }
+        .allowsHitTesting(false)
     }
 }
 
@@ -660,12 +851,39 @@ private struct ARSceneView: UIViewRepresentable {
                         self?.onRecognitionUpdate(result)
                     }
                 }
-                request?.imageCropAndScaleOption = .centerCrop
+                request?.regionOfInterest = CGRect(x: 0.27, y: 0.27, width: 0.46, height: 0.46)
+                request?.imageCropAndScaleOption = .scaleFill
             } catch {
                 DispatchQueue.main.async { [onRecognitionUpdate] in
                     onRecognitionUpdate(nil)
                 }
             }
         }
+    }
+}
+
+struct ARScannerView_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            preview(step: 0)
+                .previewDisplayName("A-9 Find target")
+
+            preview(step: 1)
+                .previewDisplayName("A-10 Camera button")
+
+            preview(step: 2)
+                .previewDisplayName("A-11 Reference button")
+        }
+    }
+
+    private static func preview(step: Int) -> some View {
+        NavigationStack {
+            ARScannerView(
+                artworkID: PreviewSupport.firstArtwork.id,
+                usesLiveCamera: false,
+                previewTutorialStep: step
+            )
+        }
+        .environmentObject(PreviewSupport.game)
     }
 }

@@ -66,9 +66,9 @@ struct CompletionView: View {
                     .buttonStyle(.plain)
 
                     Button {
-                        game.restart()
+                        game.returnHome()
                     } label: {
-                        Label("Restart", systemImage: "arrow.clockwise")
+                        Label("Back to home", systemImage: "house.fill")
                             .font(.system(size: 16, weight: .black, design: .rounded))
                             .foregroundStyle(Color(red: 0.47, green: 0.28, blue: 0.0))
                             .frame(maxWidth: .infinity)
@@ -88,5 +88,14 @@ struct CompletionView: View {
             }
         }
         .navigationBarBackButtonHidden()
+    }
+}
+
+struct CompletionView_Previews: PreviewProvider {
+    static var previews: some View {
+        NavigationStack {
+            CompletionView(missionID: PreviewSupport.firstMission.id)
+        }
+        .environmentObject(PreviewSupport.game)
     }
 }

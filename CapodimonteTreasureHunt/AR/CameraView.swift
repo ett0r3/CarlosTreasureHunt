@@ -14,6 +14,11 @@ import Combine
 struct CameraView: View {
 
     @StateObject private var camera = CameraViewModel()
+    private let startsCamera: Bool
+
+    init(startsCamera: Bool = true) {
+        self.startsCamera = startsCamera
+    }
 
     var body: some View {
 
@@ -36,15 +41,17 @@ struct CameraView: View {
             }
         }
         .onAppear {
-            camera.checkPermissions()
-            camera.setupCamera()
+            if startsCamera {
+                camera.checkPermissions()
+                camera.setupCamera()
+            }
         }
     }
 }
 
 class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate {
 
-    @Published var detectedArtwork = "Inquadra un dipinto"
+    @Published var detectedArtwork = "Frame a painting"
 
     let session = AVCaptureSession()
 
@@ -57,7 +64,7 @@ class CameraViewModel: NSObject, ObservableObject, AVCaptureVideoDataOutputSampl
         AVCaptureDevice.requestAccess(for: .video) { granted in
 
             if granted {
-                print("Camera autorizzata")
+                print("Camera authorized")
             }
         }
     }
@@ -170,6 +177,6 @@ struct CameraPreview: UIViewRepresentable {
 
 struct CameraView_Previews: PreviewProvider {
     static var previews: some View {
-        CameraView()
+        CameraView(startsCamera: false)
     }
 }

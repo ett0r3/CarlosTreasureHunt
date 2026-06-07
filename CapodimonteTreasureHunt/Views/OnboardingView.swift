@@ -8,46 +8,52 @@ import SwiftUI
 struct OnboardingView: View {
     @EnvironmentObject private var game: GameStore
     @FocusState private var isNameFocused: Bool
-    @State private var pageIndex = 0
+    @State private var pageIndex: Int
 
-    private let pages: [IntroPage] = [
-        IntroPage(
-            assetName: "carlo-intro1",
-            text: "Hello Explorer! I am Carlo di Borbone. Welcome to Museo di Capodimonte. What's your name?",
-            textFrame: CGRect(x: 0.22, y: 0.10, width: 0.56, height: 0.22),
-            fontSize: 15
-        ),
-        IntroPage(
-            assetName: nil,
-            text: "Enter your name!",
-            textFrame: .zero,
-            fontSize: 0
-        ),
-        IntroPage(
-            assetName: "carlo-intro2",
-            text: "My mother, Elisabetta Farnese left me an important message, but it got lost and now I need your help to find it!",
-            textFrame: CGRect(x: 0.12, y: 0.15, width: 0.76, height: 0.22),
-            fontSize: 14
-        ),
-        IntroPage(
-            assetName: "carlo-intro3",
-            text: "To find it, you'll need to look carefully at the paintings and scan the hidden details you discover along the way...",
-            textFrame: CGRect(x: 0.17, y: 0.12, width: 0.66, height: 0.22),
-            fontSize: 14
-        ),
-        IntroPage(
-            assetName: "carlo-intro4",
-            text: "...With this magic magnifying glass!",
-            textFrame: CGRect(x: 0.17, y: 0.16, width: 0.66, height: 0.18),
-            fontSize: 17
-        ),
-        IntroPage(
-            assetName: "carlo-intro5",
-            text: "Let me show you how it works...",
-            textFrame: CGRect(x: 0.19, y: 0.16, width: 0.62, height: 0.18),
-            fontSize: 14
-        )
-    ]
+    private var pages: [IntroPage] {
+        [
+            IntroPage(
+                assetName: "carlo-intro1",
+                text: "Hello Explorer! I am Carlo di Borbone. Welcome to Museo di Capodimonte. What's your name?",
+                textFrame: CGRect(x: 0.22, y: 0.09, width: 0.56, height: 0.22),
+                fontSize: 20
+            ),
+            IntroPage(
+                assetName: nil,
+                text: "Enter your name!",
+                textFrame: .zero,
+                fontSize: 0
+            ),
+            IntroPage(
+                assetName: "carlo-intro2",
+                text: "My mother, Elisabetta Farnese, left me an important message, but it got lost. \(game.displayName), I need your help to find it!",
+                textFrame: CGRect(x: 0.22, y: 0.09, width: 0.56, height: 0.22),
+                fontSize: 20
+            ),
+            IntroPage(
+                assetName: "carlo-intro3",
+                text: "To find it, you'll need to look carefully at the paintings and scan the hidden details you discover along the way...",
+                textFrame: CGRect(x: 0.22, y: 0.09, width: 0.56, height: 0.22),
+                fontSize: 20
+            ),
+            IntroPage(
+                assetName: "carlo-intro4",
+                text: "...With this magic magnifying glass!",
+                textFrame: CGRect(x: 0.22, y: 0.12, width: 0.56, height: 0.22),
+                fontSize: 20
+            ),
+            IntroPage(
+                assetName: "carlo-intro5",
+                text: "So, \(game.displayName), let me show you how it works...",
+                textFrame: CGRect(x: 0.22, y: 0.10, width: 0.56, height: 0.22),
+                fontSize: 20
+            )
+        ]
+    }
+
+    init(initialPageIndex: Int = 0) {
+        _pageIndex = State(initialValue: min(max(initialPageIndex, 0), 5))
+    }
 
     var body: some View {
         ZStack {
@@ -78,14 +84,9 @@ struct OnboardingView: View {
 
                 Spacer()
 
-                HStack {
-                    Spacer()
-
-                    IntroNextButton {
-                        advance()
-                    }
+                IntroNextButton {
+                    advance()
                 }
-                .padding(.horizontal, 28)
                 .padding(.bottom, 28)
             }
         }
@@ -166,7 +167,7 @@ private struct NameEntryPage: View {
                 .foregroundStyle(Color(red: 0.04, green: 0.04, blue: 0.04))
                 .multilineTextAlignment(.center)
 
-            TextField("Maria", text: $playerName)
+            TextField("Your Name", text: $playerName)
                 .textInputAutocapitalization(.words)
                 .autocorrectionDisabled()
                 .focused($isFocused)
@@ -235,5 +236,26 @@ private struct IntroBackground: View {
             endPoint: .bottom
         )
         .ignoresSafeArea()
+    }
+}
+
+struct OnboardingView_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            onboardingPreview(page: 0, name: "A-2")
+            onboardingPreview(page: 1, name: "A-3 Name")
+            onboardingPreview(page: 2, name: "A-4")
+            onboardingPreview(page: 3, name: "A-5")
+            onboardingPreview(page: 4, name: "A-6")
+            onboardingPreview(page: 5, name: "A-7")
+        }
+    }
+
+    private static func onboardingPreview(page: Int, name: String) -> some View {
+        NavigationStack {
+            OnboardingView(initialPageIndex: page)
+        }
+        .environmentObject(PreviewSupport.game)
+        .previewDisplayName(name)
     }
 }

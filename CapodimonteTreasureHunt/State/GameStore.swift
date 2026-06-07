@@ -10,6 +10,9 @@ final class GameStore: ObservableObject {
     private enum PersistenceKey {
         static let playerName = "game.playerName"
         static let missionProgress = "game.missionProgress"
+        static let activeMissionID = "game.activeMissionID"
+        static let hasCompletedOnboarding = "game.hasCompletedOnboarding"
+        static let hasCompletedScannerTutorial = "game.hasCompletedScannerTutorial"
     }
 
     @Published var path: [GameRoute] = []
@@ -20,7 +23,28 @@ final class GameStore: ObservableObject {
     }
 
     @Published private(set) var missions: [MissionCollection]
-    @Published private(set) var activeMissionID: UUID?
+    @Published private(set) var activeMissionID: UUID? {
+        didSet {
+            if let activeMissionID {
+                UserDefaults.standard.set(activeMissionID.uuidString, forKey: PersistenceKey.activeMissionID)
+            } else {
+                UserDefaults.standard.removeObject(forKey: PersistenceKey.activeMissionID)
+            }
+        }
+    }
+    @Published private(set) var hasCompletedOnboarding: Bool {
+        didSet {
+            UserDefaults.standard.set(hasCompletedOnboarding, forKey: PersistenceKey.hasCompletedOnboarding)
+        }
+    }
+    @Published private(set) var hasCompletedScannerTutorial: Bool {
+        didSet {
+            UserDefaults.standard.set(
+                hasCompletedScannerTutorial,
+                forKey: PersistenceKey.hasCompletedScannerTutorial
+            )
+        }
+    }
     @Published private(set) var progressByMissionID: [UUID: MissionProgress] = [:] {
         didSet {
             saveMissionProgress()
@@ -28,9 +52,23 @@ final class GameStore: ObservableObject {
     }
 
     init(missions: [MissionCollection] = MissionCollection.capodimonteDemo) {
+        let defaults = UserDefaults.standard
         self.missions = missions
-        self.playerName = UserDefaults.standard.string(forKey: PersistenceKey.playerName) ?? ""
+        self.playerName = defaults.string(forKey: PersistenceKey.playerName) ?? ""
+        self.hasCompletedOnboarding = defaults.bool(forKey: PersistenceKey.hasCompletedOnboarding)
+        self.hasCompletedScannerTutorial = defaults.bool(forKey: PersistenceKey.hasCompletedScannerTutorial)
         self.progressByMissionID = Self.loadMissionProgress()
+
+        if
+            let storedMissionID = defaults.string(forKey: PersistenceKey.activeMissionID),
+            let missionID = UUID(uuidString: storedMissionID),
+            missions.contains(where: { $0.id == missionID })
+        {
+            self.activeMissionID = missionID
+        } else {
+            self.activeMissionID = nil
+        }
+
         normalizeMissionProgress()
     }
 
@@ -39,8 +77,20 @@ final class GameStore: ObservableObject {
         return trimmedName.isEmpty ? "Explorer" : trimmedName
     }
 
-    var hasAnyProgress: Bool {
-        progressByMissionID.values.contains { !$0.unlockedArtworkIDs.isEmpty }
+    var hasCompletedFirstMission: Bool {
+        guard let firstMission = missions.first else {
+            return false
+        }
+
+        return isMissionCompleted(firstMission)
+    }
+
+    var canAccessGallery: Bool {
+        hasCompletedFirstMission
+    }
+
+    var shouldShowScannerTutorial: Bool {
+        !hasCompletedScannerTutorial
     }
 
     var activeMission: MissionCollection? {
@@ -52,20 +102,62 @@ final class GameStore: ObservableObject {
     }
 
     func startHunt() {
-        path = [.intro]
+        guard hasCompletedOnboarding else {
+            path = [.intro]
+            return
+        }
+
+        guard let mission = missionToResume() else {
+            if canAccessGallery {
+                path = [.gallery]
+            }
+            return
+        }
+
+        activeMissionID = mission.id
+
+        if let artwork = currentArtwork(in: mission) {
+            path = [.target(artwork.id)]
+        }
     }
 
     func finishIntro() {
-        openGallery()
+        hasCompletedOnboarding = true
+
+        guard
+            let firstMission = missions.first,
+            let firstArtwork = currentArtwork(in: firstMission)
+        else {
+            return
+        }
+
+        activeMissionID = firstMission.id
+        path = [.target(firstArtwork.id)]
+    }
+
+    func completeScannerTutorial() {
+        hasCompletedScannerTutorial = true
     }
 
     func openGallery() {
-        path.append(.gallery)
+        guard canAccessGallery else {
+            return
+        }
+
+        path = [.gallery]
     }
 
     func openMission(_ mission: MissionCollection) {
+        guard canOpenMission(mission) else {
+            return
+        }
+
         activeMissionID = mission.id
         path.append(.mission(mission.id))
+    }
+
+    func canOpenMission(_ mission: MissionCollection) -> Bool {
+        mission.id == missions.first?.id || canAccessGallery
     }
 
     func openCurrentTarget(in mission: MissionCollection? = nil) {
@@ -174,13 +266,40 @@ final class GameStore: ObservableObject {
         path = [.wordReveal(artwork.id)]
     }
 
-    func restart() {
+    func returnHome() {
+        path = []
+    }
+
+    func resetAllGameDataForTesting() {
         playerName = ""
         activeMissionID = nil
+        hasCompletedOnboarding = false
+        hasCompletedScannerTutorial = false
         progressByMissionID.removeAll()
         UserDefaults.standard.removeObject(forKey: PersistenceKey.playerName)
         UserDefaults.standard.removeObject(forKey: PersistenceKey.missionProgress)
+        UserDefaults.standard.removeObject(forKey: PersistenceKey.activeMissionID)
+        UserDefaults.standard.removeObject(forKey: PersistenceKey.hasCompletedOnboarding)
+        UserDefaults.standard.removeObject(forKey: PersistenceKey.hasCompletedScannerTutorial)
         path = []
+    }
+
+    private func missionToResume() -> MissionCollection? {
+        guard let firstMission = missions.first else {
+            return nil
+        }
+
+        if !isMissionCompleted(firstMission) {
+            return firstMission
+        }
+
+        if let activeMission, !isMissionCompleted(activeMission) {
+            return activeMission
+        }
+
+        return missions.dropFirst().first { mission in
+            completedCount(for: mission) > 0 && !isMissionCompleted(mission)
+        }
     }
 
     private func progress(for mission: MissionCollection) -> MissionProgress {
