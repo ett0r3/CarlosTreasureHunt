@@ -75,6 +75,7 @@ struct WordRevealView: View {
 
 struct ArtworkRevealView: View {
     @EnvironmentObject private var game: GameStore
+    @State private var showsFullScreenArtwork = false
     let artworkID: UUID
 
     var body: some View {
@@ -82,14 +83,13 @@ struct ArtworkRevealView: View {
             PurpleGameBackground(raysOpacity: 0.22)
 
             if let artwork = game.artwork(with: artworkID) {
-                GeometryReader { proxy in
+                ScrollView(showsIndicators: false) {
                     VStack(spacing: 0) {
-                        Spacer(minLength: 28)
-
                         Text(artwork.title)
                             .font(.system(size: 24, weight: .black, design: .rounded))
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.white)
+                            .padding(.top, 34)
                             .padding(.horizontal, 28)
                             .minimumScaleFactor(0.7)
 
@@ -98,20 +98,25 @@ struct ArtworkRevealView: View {
                             .foregroundStyle(.white)
                             .padding(.top, 12)
 
-                        FullArtworkImage(artwork: artwork)
-                            .scaledToFill()
-                            .frame(width: min(proxy.size.width * 0.62, 260), height: min(proxy.size.height * 0.46, 360))
-                            .clipShape(RoundedRectangle(cornerRadius: 9))
-                            .shadow(color: .black.opacity(0.24), radius: 20, y: 12)
-                            .padding(.top, 28)
-
-                        Spacer()
+                        Button {
+                            showsFullScreenArtwork = true
+                        } label: {
+                            FullArtworkImage(artwork: artwork)
+                                .scaledToFit()
+                                .frame(maxWidth: 340, maxHeight: 430)
+                                .shadow(color: .black.opacity(0.24), radius: 20, y: 12)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("View \(artwork.title) full screen")
+                        .padding(.horizontal, 28)
+                        .padding(.top, 24)
 
                         RewardCarloBubble(
                             boldLead: "Fun fact:",
                             message: artwork.artworkDescription
                         )
                         .padding(.horizontal, 22)
+                        .padding(.top, 30)
                         .padding(.bottom, 22)
 
                         RewardNextButton {
@@ -119,13 +124,112 @@ struct ArtworkRevealView: View {
                         }
                         .padding(.bottom, 28)
                     }
-                    .frame(width: proxy.size.width, height: proxy.size.height)
+                }
+                .fullScreenCover(isPresented: $showsFullScreenArtwork) {
+                    FullScreenArtworkViewer(artwork: artwork)
                 }
             } else {
                 ContentUnavailableView("Artwork not found", systemImage: "questionmark.circle")
             }
         }
         .navigationBarBackButtonHidden()
+    }
+}
+
+private struct FullScreenArtworkViewer: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var dragOffset: CGSize = .zero
+    @State private var isDismissing = false
+
+    let artwork: ArtworkTarget
+
+    private var dragDistance: CGFloat {
+        hypot(dragOffset.width, dragOffset.height)
+    }
+
+    private var imageScale: CGFloat {
+        max(0.82, 1 - dragDistance / 1_100)
+    }
+
+    private var backdropOpacity: Double {
+        max(0, 1 - Double(dragDistance / 430))
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color.black
+                    .opacity(backdropOpacity)
+                    .ignoresSafeArea()
+
+                FullArtworkImage(artwork: artwork)
+                    .scaledToFit()
+                    .frame(
+                        maxWidth: proxy.size.width - 24,
+                        maxHeight: proxy.size.height - 48
+                    )
+                    .scaleEffect(imageScale)
+                    .offset(dragOffset)
+                    .gesture(dismissGesture(in: proxy.size))
+                    .accessibilityAction(.escape) {
+                        dismiss()
+                    }
+            }
+            .contentShape(Rectangle())
+        }
+        .statusBarHidden()
+    }
+
+    private func dismissGesture(in viewportSize: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 4, coordinateSpace: .global)
+            .onChanged { value in
+                guard !isDismissing else {
+                    return
+                }
+
+                dragOffset = value.translation
+            }
+            .onEnded { value in
+                let predictedDistance = hypot(
+                    value.predictedEndTranslation.width,
+                    value.predictedEndTranslation.height
+                )
+
+                guard dragDistance > 120 || predictedDistance > 220 else {
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
+                        dragOffset = .zero
+                    }
+                    return
+                }
+
+                isDismissing = true
+                let direction = dismissalDirection(
+                    translation: value.predictedEndTranslation,
+                    fallback: value.translation
+                )
+                let travel = max(viewportSize.width, viewportSize.height) * 1.25
+
+                withAnimation(.easeIn(duration: 0.20)) {
+                    dragOffset = CGSize(
+                        width: direction.width * travel,
+                        height: direction.height * travel
+                    )
+                }
+
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.20) {
+                    dismiss()
+                }
+            }
+    }
+
+    private func dismissalDirection(translation: CGSize, fallback: CGSize) -> CGSize {
+        let candidate = hypot(translation.width, translation.height) > 1 ? translation : fallback
+        let magnitude = max(hypot(candidate.width, candidate.height), 1)
+
+        return CGSize(
+            width: candidate.width / magnitude,
+            height: candidate.height / magnitude
+        )
     }
 }
 

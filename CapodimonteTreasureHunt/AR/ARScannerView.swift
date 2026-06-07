@@ -5,6 +5,7 @@
 
 import ARKit
 import Combine
+import CoreImage
 import SceneKit
 import SwiftUI
 import Vision
@@ -96,16 +97,13 @@ struct ARScannerView: View {
                     isSwapBubbleDipped: isSwapBubbleDipped,
                     isSwapEnabled: isSwapEnabled,
                     isSwapHighlighted: tutorialStage == .cameraHint || tutorialStage == .referenceHint,
+                    recognitionProgress: recognitionProgress,
+                    showsRecognitionProgress: tutorialStage == .completed && !showsReferenceImage && !didCompleteRecognition,
                     namespace: swapNamespace
                 ) {
                     handleSwapButtonTap()
                 }
                 .ignoresSafeArea()
-
-                if tutorialStage == .completed && !showsReferenceImage && !didCompleteRecognition {
-                    ScannerRecognitionFeedback(progress: recognitionProgress)
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
             } else {
                 ARSceneView(artwork: nil) { _ in }
                     .ignoresSafeArea()
@@ -494,13 +492,15 @@ private struct MagnifyingScannerOverlay: View {
     let isSwapBubbleDipped: Bool
     let isSwapEnabled: Bool
     let isSwapHighlighted: Bool
+    let recognitionProgress: Double
+    let showsRecognitionProgress: Bool
     let namespace: Namespace.ID
     let swapAction: () -> Void
 
     var body: some View {
         GeometryReader { proxy in
             let lensSize = ScannerLensGeometry.lensSize(in: proxy.size)
-            let lensOpeningSize = lensSize * ScannerLensGeometry.openingRatio
+            let lensOpeningSize = ScannerLensGeometry.openingSize(in: proxy.size)
             let lensCenterY = proxy.size.height / 2
             let swapCenter = ScannerLensGeometry.swapCenter(
                 in: proxy.size,
@@ -524,6 +524,17 @@ private struct MagnifyingScannerOverlay: View {
 
                 ScannerLensAsset(lensSize: lensSize, lensCenterY: lensCenterY)
                     .allowsHitTesting(false)
+
+                if showsRecognitionProgress {
+                    MagicalRecognitionRing(progress: recognitionProgress)
+                        .frame(
+                            width: lensOpeningSize - 22,
+                            height: lensOpeningSize - 22
+                        )
+                        .position(x: proxy.size.width / 2, y: lensCenterY)
+                        .transition(.opacity)
+                        .allowsHitTesting(false)
+                }
 
                 SwapPreviewButton(
                     artwork: artwork,
@@ -560,7 +571,11 @@ private enum ScannerLensGeometry {
     static let openingRatio = openingDiameter / assetWidth
 
     static func lensSize(in size: CGSize) -> CGFloat {
-        min(size.width * 1.18, size.height * 0.64)
+        min(size.width * 1.28, size.height * 0.70)
+    }
+
+    static func openingSize(in size: CGSize) -> CGFloat {
+        lensSize(in: size) * openingRatio
     }
 
     static func swapCenter(in size: CGSize, lensSize: CGFloat) -> CGPoint {
@@ -570,6 +585,76 @@ private enum ScannerLensGeometry {
                 (lensSize * outerRadiusRatio) -
                 (swapButtonSize * 0.2)
         )
+    }
+}
+
+private struct MagicalRecognitionRing: View {
+    let progress: Double
+
+    var body: some View {
+        TimelineView(.animation) { timeline in
+            let pulse = (sin(timeline.date.timeIntervalSinceReferenceDate * 6) + 1) / 2
+            let clampedProgress = min(max(progress, 0), 1)
+
+            GeometryReader { proxy in
+                let lineWidth: CGFloat = 8
+                let diameter = min(proxy.size.width, proxy.size.height)
+                let radius = (diameter - lineWidth) / 2
+                let angle = Angle.degrees(-90 + (360 * clampedProgress))
+                let endpoint = CGPoint(
+                    x: proxy.size.width / 2 + cos(angle.radians) * radius,
+                    y: proxy.size.height / 2 + sin(angle.radians) * radius
+                )
+
+                ZStack {
+                    Circle()
+                        .stroke(Color.white.opacity(0.18), lineWidth: lineWidth)
+
+                    Circle()
+                        .trim(from: 0, to: max(clampedProgress, 0.002))
+                        .stroke(
+                            AngularGradient(
+                                colors: [
+                                    Color(red: 1.0, green: 0.63, blue: 0.0),
+                                    Color(red: 1.0, green: 0.96, blue: 0.55),
+                                    Color.white,
+                                    Color(red: 1.0, green: 0.70, blue: 0.0)
+                                ],
+                                center: .center
+                            ),
+                            style: StrokeStyle(lineWidth: lineWidth, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                        .shadow(
+                            color: Color(red: 1.0, green: 0.78, blue: 0.10).opacity(0.9),
+                            radius: 8
+                        )
+                        .animation(.linear(duration: 0.08), value: clampedProgress)
+
+                    if clampedProgress > 0 {
+                        ZStack {
+                            Circle()
+                                .fill(Color.white.opacity(0.92))
+                                .frame(width: 11 + pulse * 4, height: 11 + pulse * 4)
+                                .shadow(color: GameTheme.gold, radius: 12 + pulse * 5)
+
+                            ForEach(0..<4, id: \.self) { index in
+                                let sparkleAngle = Double(index) * (.pi / 2) + pulse
+                                Circle()
+                                    .fill(index.isMultiple(of: 2) ? Color.white : GameTheme.gold)
+                                    .frame(width: 3 + pulse * 2, height: 3 + pulse * 2)
+                                    .offset(
+                                        x: cos(sparkleAngle) * (12 + pulse * 5),
+                                        y: sin(sparkleAngle) * (12 + pulse * 5)
+                                    )
+                            }
+                        }
+                        .position(endpoint)
+                    }
+                }
+            }
+        }
+        .accessibilityHidden(true)
     }
 }
 
@@ -658,7 +743,7 @@ private struct ReferenceScannerSurface: View {
         GeometryReader { proxy in
             let lensSize = ScannerLensGeometry.lensSize(in: proxy.size)
             let lensCenterY = proxy.size.height / 2
-            let referenceSize = lensSize * ScannerLensGeometry.openingRatio
+            let referenceSize = ScannerLensGeometry.openingSize(in: proxy.size)
 
             ZStack {
                 ReferenceArtworkImage(artwork: artwork)
@@ -690,39 +775,6 @@ private struct ReferenceScannerSurface: View {
                     .position(x: proxy.size.width / 2, y: max(72, lensCenterY - (lensSize / 2) - 34))
             }
         }
-    }
-}
-
-private struct ScannerRecognitionFeedback: View {
-    let progress: Double
-
-    var body: some View {
-        VStack {
-            Spacer()
-
-            VStack(spacing: 9) {
-                Text(progress > 0 ? "Keep the detail inside the lens" : "Frame the hidden detail")
-                    .font(.system(size: 14, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-
-                Text("Hold steady for 4 seconds")
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.78))
-
-                ProgressView(value: progress)
-                    .tint(Color(red: 1.0, green: 0.72, blue: 0.0))
-                    .scaleEffect(x: 1, y: 1.8)
-                    .animation(.linear(duration: 0.08), value: progress)
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 14)
-            .frame(maxWidth: 310)
-            .background(.black.opacity(0.58))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .padding(.horizontal, 28)
-            .padding(.bottom, 34)
-        }
-        .allowsHitTesting(false)
     }
 }
 
@@ -772,12 +824,24 @@ private struct ReferenceArtworkImage: View {
     }
 }
 
+private final class ScannerARSCNView: ARSCNView {
+    var onViewportSizeChange: ((CGSize) -> Void)?
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onViewportSizeChange?(bounds.size)
+    }
+}
+
 private struct ARSceneView: UIViewRepresentable {
     let artwork: ArtworkTarget?
     let onRecognitionUpdate: (ArtworkRecognitionResult?) -> Void
 
     func makeUIView(context: Context) -> ARSCNView {
-        let view = ARSCNView(frame: .zero)
+        let view = ScannerARSCNView(frame: .zero)
+        view.onViewportSizeChange = { [weak coordinator = context.coordinator] size in
+            coordinator?.updateViewportSize(size)
+        }
         view.session.delegate = context.coordinator
         view.autoenablesDefaultLighting = true
         view.scene = SCNScene()
@@ -791,9 +855,12 @@ private struct ARSceneView: UIViewRepresentable {
         return view
     }
 
-    func updateUIView(_ uiView: ARSCNView, context: Context) {}
+    func updateUIView(_ uiView: ARSCNView, context: Context) {
+        context.coordinator.updateViewportSize(uiView.bounds.size)
+    }
 
     static func dismantleUIView(_ uiView: ARSCNView, coordinator: Coordinator) {
+        (uiView as? ScannerARSCNView)?.onViewportSizeChange = nil
         uiView.session.pause()
     }
 
@@ -804,9 +871,12 @@ private struct ARSceneView: UIViewRepresentable {
     final class Coordinator: NSObject, ARSessionDelegate {
         private let service = ArtworkRecognitionService()
         private let visionQueue = DispatchQueue(label: "capodimonte.coreml.vision")
+        private let imageContext = CIContext(options: [.cacheIntermediates: false])
+        private let viewportLock = NSLock()
         private var request: VNCoreMLRequest?
         private var isProcessingFrame = false
         private var lastAnalysisTime: TimeInterval = 0
+        private var viewportSize: CGSize = .zero
         private var artwork: ArtworkTarget?
         private var onRecognitionUpdate: (ArtworkRecognitionResult?) -> Void
 
@@ -815,6 +885,16 @@ private struct ARSceneView: UIViewRepresentable {
             self.onRecognitionUpdate = onRecognitionUpdate
             super.init()
             configureModel()
+        }
+
+        func updateViewportSize(_ size: CGSize) {
+            guard size.width > 0, size.height > 0 else {
+                return
+            }
+
+            viewportLock.lock()
+            viewportSize = size
+            viewportLock.unlock()
         }
 
         func session(_ session: ARSession, didUpdate frame: ARFrame) {
@@ -831,16 +911,117 @@ private struct ARSceneView: UIViewRepresentable {
             isProcessingFrame = true
             lastAnalysisTime = currentTime
             let pixelBuffer = frame.capturedImage
+            let viewportSize = currentViewportSize()
 
             visionQueue.async { [weak self] in
                 guard let self, let request = self.request else {
                     return
                 }
 
-                let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, orientation: .right)
+                defer {
+                    self.isProcessingFrame = false
+                }
+
+                guard let lensImage = self.makeCircularLensImage(
+                    from: pixelBuffer,
+                    viewportSize: viewportSize
+                ) else {
+                    DispatchQueue.main.async { [onRecognitionUpdate = self.onRecognitionUpdate] in
+                        onRecognitionUpdate(nil)
+                    }
+                    return
+                }
+
+                let handler = VNImageRequestHandler(cgImage: lensImage, orientation: .up)
                 try? handler.perform([request])
-                self.isProcessingFrame = false
             }
+        }
+
+        private func currentViewportSize() -> CGSize {
+            viewportLock.lock()
+            defer { viewportLock.unlock() }
+            return viewportSize
+        }
+
+        private func makeCircularLensImage(
+            from pixelBuffer: CVPixelBuffer,
+            viewportSize: CGSize
+        ) -> CGImage? {
+            guard viewportSize.width > 0, viewportSize.height > 0 else {
+                return nil
+            }
+
+            let orientedImage = CIImage(cvPixelBuffer: pixelBuffer).oriented(.right)
+            let sourceImage = orientedImage.transformed(
+                by: CGAffineTransform(
+                    translationX: -orientedImage.extent.minX,
+                    y: -orientedImage.extent.minY
+                )
+            )
+            let sourceExtent = sourceImage.extent
+            let displayScale = max(
+                viewportSize.width / sourceExtent.width,
+                viewportSize.height / sourceExtent.height
+            )
+            let visibleCropSide = min(
+                ScannerLensGeometry.openingSize(in: viewportSize),
+                viewportSize.width,
+                viewportSize.height
+            )
+            let sourceCropSide = min(
+                visibleCropSide / displayScale,
+                sourceExtent.width,
+                sourceExtent.height
+            )
+            let cropRect = CGRect(
+                x: sourceExtent.midX - sourceCropSide / 2,
+                y: sourceExtent.midY - sourceCropSide / 2,
+                width: sourceCropSide,
+                height: sourceCropSide
+            ).integral
+            let croppedImage = sourceImage
+                .cropped(to: cropRect)
+                .transformed(
+                    by: CGAffineTransform(
+                        translationX: -cropRect.minX,
+                        y: -cropRect.minY
+                    )
+                )
+            let outputExtent = CGRect(origin: .zero, size: cropRect.size)
+            let visibleLensRadius = ScannerLensGeometry.openingSize(in: viewportSize) / 2
+            let sourceLensRadius = min(
+                visibleLensRadius / displayScale,
+                hypot(outputExtent.width, outputExtent.height) / 2
+            )
+
+            guard
+                let radialMask = CIFilter(
+                    name: "CIRadialGradient",
+                    parameters: [
+                        kCIInputCenterKey: CIVector(x: outputExtent.midX, y: outputExtent.midY),
+                        "inputRadius0": max(sourceLensRadius - 1, 0),
+                        "inputRadius1": sourceLensRadius,
+                        "inputColor0": CIColor.white,
+                        "inputColor1": CIColor.black
+                    ]
+                )?.outputImage?.cropped(to: outputExtent),
+                let blendFilter = CIFilter(name: "CIBlendWithMask")
+            else {
+                return nil
+            }
+
+            blendFilter.setValue(croppedImage, forKey: kCIInputImageKey)
+            blendFilter.setValue(
+                CIImage(color: CIColor.black).cropped(to: outputExtent),
+                forKey: kCIInputBackgroundImageKey
+            )
+            blendFilter.setValue(radialMask, forKey: kCIInputMaskImageKey)
+
+            guard let maskedImage = blendFilter.outputImage else {
+                return nil
+            }
+
+            return imageContext.createCGImage(maskedImage, from: outputExtent)
         }
 
         private func configureModel() {
@@ -851,7 +1032,6 @@ private struct ARSceneView: UIViewRepresentable {
                         self?.onRecognitionUpdate(result)
                     }
                 }
-                request?.regionOfInterest = CGRect(x: 0.27, y: 0.27, width: 0.46, height: 0.46)
                 request?.imageCropAndScaleOption = .scaleFill
             } catch {
                 DispatchQueue.main.async { [onRecognitionUpdate] in

@@ -24,42 +24,51 @@ struct MissionGalleryView: View {
         ZStack {
             PurpleGameBackground()
 
-            VStack(spacing: 14) {
-                GalleryHeader(
-                    title: "My Missions\nCollection",
-                    subtitle: nil,
-                    showsBackButton: true
-                ) {
-                    dismiss()
-                }
-
-                MissionStars(
-                    filledCount: game.missions.filter { game.completedCount(for: $0) > 0 }.count,
-                    totalCount: game.missions.count
-                )
-
-                ScrollView(showsIndicators: false) {
-                    LazyVGrid(columns: columns, spacing: 14) {
-                        ForEach(game.missions) { mission in
-                            Button {
-                                game.openMission(mission)
-                            } label: {
-                                MissionCollectionCard(
-                                    mission: mission,
-                                    progressText: game.progressText(for: mission),
-                                    isAvailable: game.canOpenMission(mission),
-                                    isStarted: game.completedCount(for: mission) > 0,
-                                    isCompleted: game.isMissionCompleted(mission)
-                                )
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(!game.canOpenMission(mission))
-                        }
+            if game.canAccessGallery {
+                VStack(spacing: 14) {
+                    GalleryHeader(
+                        title: "My Missions\nCollection",
+                        subtitle: nil,
+                        showsBackButton: true
+                    ) {
+                        dismiss()
                     }
-                    .padding(.horizontal, 22)
-                    .padding(.top, 4)
-                    .padding(.bottom, 34)
+
+                    MissionStars(
+                        filledCount: game.missions.filter { game.completedCount(for: $0) > 0 }.count,
+                        totalCount: game.missions.count
+                    )
+
+                    ScrollView(showsIndicators: false) {
+                        LazyVGrid(columns: columns, spacing: 14) {
+                            ForEach(game.missions) { mission in
+                                Button {
+                                    game.openMission(mission)
+                                } label: {
+                                    MissionCollectionCard(
+                                        mission: mission,
+                                        progressText: game.progressText(for: mission),
+                                        isAvailable: game.canOpenMission(mission),
+                                        isStarted: game.completedCount(for: mission) > 0,
+                                        isCompleted: game.isMissionCompleted(mission)
+                                    )
+                                }
+                                .buttonStyle(.plain)
+                                .disabled(!game.canOpenMission(mission))
+                            }
+                        }
+                        .padding(.horizontal, 22)
+                        .padding(.top, 4)
+                        .padding(.bottom, 34)
+                    }
                 }
+            } else {
+                ContentUnavailableView(
+                    "Gallery locked",
+                    systemImage: "lock.fill",
+                    description: Text("Complete Mission 1 to unlock your collections.")
+                )
+                .foregroundStyle(.white)
             }
         }
         .navigationTitle("")

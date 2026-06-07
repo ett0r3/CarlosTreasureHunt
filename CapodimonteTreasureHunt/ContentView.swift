@@ -56,7 +56,7 @@ private struct HomeView: View {
                 Image("carlo-intro0")
                     .resizable()
                     .scaledToFill()
-                    .frame(width: fullWidth, height: fullHeight)
+                    .frame(width: fullWidth + 20, height: fullHeight + 20)
                     .clipped()
                     .position(
                         x: (proxy.size.width + proxy.safeAreaInsets.trailing - proxy.safeAreaInsets.leading) / 2,
@@ -65,12 +65,13 @@ private struct HomeView: View {
 
                 VStack(spacing: 0) {
                     Text("Carlo's\nTreasure\nHunt")
-                        .font(.system(size: 52, weight: .black, design: .rounded))
+                        .font(.system(size: 50, weight: .black, design: .rounded))
                         .multilineTextAlignment(.center)
-                        .lineSpacing(-2)
+                        .lineSpacing(-7)
                         .foregroundStyle(Color(red: 1.0, green: 0.94, blue: 0.82))
                         .shadow(color: .black.opacity(0.16), radius: 8, y: 5)
                         .padding(.top, 42)
+                        .frame(maxWidth: .infinity, alignment: .center)
                         .minimumScaleFactor(0.72)
 
                     Spacer()
