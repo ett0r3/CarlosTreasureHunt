@@ -28,7 +28,7 @@ struct ARScannerView: View {
     private let usesLiveCamera: Bool
     private let recognitionTimer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
-    private static let requiredRecognitionDuration: TimeInterval = 4
+    private static let requiredRecognitionDuration: TimeInterval = 3
     private static let recognitionFreshnessInterval: TimeInterval = 0.75
     private static let hintDelay: TimeInterval = 15
 
@@ -158,14 +158,14 @@ struct ARScannerView: View {
                     )
                     .allowsHitTesting(false)
                     .ignoresSafeArea()
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    .transition(.opacity)
 
                 case .ready:
                     ScannerReadyOverlay {
                         beginGame()
                     }
                     .ignoresSafeArea()
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
+                    .transition(.opacity)
 
                 case .completed:
                     EmptyView()
@@ -230,11 +230,7 @@ struct ARScannerView: View {
                 }
             }
         case .referenceHint:
-            performSwap(toReference: true) {
-                withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-                    tutorialStage = .ready
-                }
-            }
+            transitionFromReferenceHintToReady()
         case .completed:
             performSwap(toReference: !showsReferenceImage)
         case .find, .ready:
@@ -246,6 +242,27 @@ struct ARScannerView: View {
         game.completeScannerTutorial()
         tutorialStage = .completed
         performSwap(toReference: false)
+    }
+
+    private func transitionFromReferenceHintToReady() {
+        resetRecognitionProgress()
+
+        withAnimation(.easeIn(duration: 0.08)) {
+            isSwapBubbleDipped = true
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) {
+            withAnimation(.easeInOut(duration: 0.14)) {
+                showsReferenceImage = true
+            }
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+            withAnimation(.easeInOut(duration: 0.16)) {
+                isSwapBubbleDipped = false
+                tutorialStage = .ready
+            }
+        }
     }
 
     private func performSwap(
@@ -826,10 +843,10 @@ private struct MagicalRecognitionRing: View {
                         .stroke(
                             AngularGradient(
                                 colors: [
-                                    Color(red: 1.0, green: 0.63, blue: 0.0),
-                                    Color(red: 1.0, green: 0.96, blue: 0.55),
+                                    Color(red: 0.02, green: 0.56, blue: 0.28),
+                                    Color(red: 0.22, green: 0.90, blue: 0.47),
                                     Color.white,
-                                    Color(red: 1.0, green: 0.70, blue: 0.0)
+                                    Color(red: 0.01, green: 0.76, blue: 0.36)
                                 ],
                                 center: .center
                             ),
@@ -837,7 +854,7 @@ private struct MagicalRecognitionRing: View {
                         )
                         .rotationEffect(.degrees(-90))
                         .shadow(
-                            color: Color(red: 1.0, green: 0.78, blue: 0.10).opacity(0.9),
+                            color: Color(red: 0.05, green: 0.82, blue: 0.39).opacity(0.9),
                             radius: 8
                         )
                         .animation(.linear(duration: 0.08), value: clampedProgress)
@@ -847,12 +864,19 @@ private struct MagicalRecognitionRing: View {
                             Circle()
                                 .fill(Color.white.opacity(0.92))
                                 .frame(width: 11 + pulse * 4, height: 11 + pulse * 4)
-                                .shadow(color: GameTheme.gold, radius: 12 + pulse * 5)
+                                .shadow(
+                                    color: Color(red: 0.08, green: 0.88, blue: 0.43),
+                                    radius: 12 + pulse * 5
+                                )
 
                             ForEach(0..<4, id: \.self) { index in
                                 let sparkleAngle = Double(index) * (.pi / 2) + pulse
                                 Circle()
-                                    .fill(index.isMultiple(of: 2) ? Color.white : GameTheme.gold)
+                                    .fill(
+                                        index.isMultiple(of: 2)
+                                            ? Color.white
+                                            : Color(red: 0.16, green: 0.94, blue: 0.49)
+                                    )
                                     .frame(width: 3 + pulse * 2, height: 3 + pulse * 2)
                                     .offset(
                                         x: cos(sparkleAngle) * (12 + pulse * 5),
@@ -1083,6 +1107,7 @@ private struct ARSceneView: UIViewRepresentable {
         private let service = ArtworkRecognitionService()
         private let visionQueue = DispatchQueue(label: "capodimonte.coreml.vision")
         private let imageContext = CIContext(options: [.cacheIntermediates: false])
+        private let processingLock = NSLock()
         private let viewportLock = NSLock()
         private var request: VNCoreMLRequest?
         private var isProcessingFrame = false
@@ -1115,22 +1140,24 @@ private struct ARSceneView: UIViewRepresentable {
 
             let currentTime = frame.timestamp
 
-            guard !isProcessingFrame, currentTime - lastAnalysisTime > 0.45 else {
+            guard beginProcessingFrame(at: currentTime) else {
                 return
             }
 
-            isProcessingFrame = true
-            lastAnalysisTime = currentTime
             let pixelBuffer = frame.capturedImage
             let viewportSize = currentViewportSize()
 
             visionQueue.async { [weak self] in
-                guard let self, let request = self.request else {
+                guard let self else {
                     return
                 }
 
                 defer {
-                    self.isProcessingFrame = false
+                    self.finishProcessingFrame()
+                }
+
+                guard let request = self.request else {
+                    return
                 }
 
                 guard let lensImage = self.makeCircularLensImage(
@@ -1146,6 +1173,25 @@ private struct ARSceneView: UIViewRepresentable {
                 let handler = VNImageRequestHandler(cgImage: lensImage, orientation: .up)
                 try? handler.perform([request])
             }
+        }
+
+        private func beginProcessingFrame(at time: TimeInterval) -> Bool {
+            processingLock.lock()
+            defer { processingLock.unlock() }
+
+            guard !isProcessingFrame, time - lastAnalysisTime > 0.45 else {
+                return false
+            }
+
+            isProcessingFrame = true
+            lastAnalysisTime = time
+            return true
+        }
+
+        private func finishProcessingFrame() {
+            processingLock.lock()
+            isProcessingFrame = false
+            processingLock.unlock()
         }
 
         private func currentViewportSize() -> CGSize {

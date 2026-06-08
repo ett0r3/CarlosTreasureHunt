@@ -83,50 +83,74 @@ struct ArtworkRevealView: View {
             PurpleGameBackground(raysOpacity: 0.22)
 
             if let artwork = game.artwork(with: artworkID) {
-                ScrollView(showsIndicators: false) {
+                GeometryReader { proxy in
+                    let compact = proxy.size.height < 760
+                    let imageHeight = min(
+                        proxy.size.height * (compact ? 0.34 : 0.40),
+                        compact ? 255 : 360
+                    )
+
                     VStack(spacing: 0) {
                         Text(artwork.title)
-                            .font(.system(size: 24, weight: .black, design: .rounded))
+                            .font(.system(
+                                size: compact ? 21 : 24,
+                                weight: .black,
+                                design: .rounded
+                            ))
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.white)
-                            .padding(.top, 34)
-                            .padding(.horizontal, 28)
+                            .lineLimit(3)
                             .minimumScaleFactor(0.7)
+                            .padding(.top, compact ? 16 : 28)
+                            .padding(.horizontal, 24)
 
                         Text("by \(artwork.artist)")
-                            .font(.system(size: 13, weight: .black, design: .rounded))
+                            .font(.system(
+                                size: compact ? 12 : 13,
+                                weight: .black,
+                                design: .rounded
+                            ))
                             .foregroundStyle(.white)
-                            .padding(.top, 12)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.75)
+                            .padding(.top, compact ? 7 : 10)
+                            .padding(.horizontal, 24)
 
                         Button {
                             showsFullScreenArtwork = true
                         } label: {
                             FullArtworkImage(artwork: artwork)
                                 .scaledToFit()
-                                .frame(maxWidth: 340, maxHeight: 430)
+                                .frame(
+                                    maxWidth: min(proxy.size.width - 48, 340),
+                                    maxHeight: imageHeight
+                                )
                                 .shadow(color: .black.opacity(0.24), radius: 20, y: 12)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("View \(artwork.title) full screen")
-                        .padding(.horizontal, 28)
-                        .padding(.top, 24)
+                        .padding(.horizontal, 24)
+                        .padding(.top, compact ? 12 : 20)
+
+                        Spacer(minLength: compact ? 8 : 16)
 
                         RewardCarloBubble(
                             boldLead: "Fun fact:",
                             message: artwork.artworkDescription
                         )
-                        .padding(.horizontal, 22)
-                        .padding(.top, 30)
-                        .padding(.bottom, 22)
+                        .padding(.horizontal, compact ? 16 : 22)
+                        .padding(.bottom, compact ? 10 : 16)
 
                         RewardNextButton {
                             game.continueAfterArtworkReveal(for: artwork)
                         }
-                        .padding(.bottom, 28)
+                        .padding(.bottom, compact ? 12 : 22)
                     }
+                    .frame(width: proxy.size.width, height: proxy.size.height)
                 }
                 .fullScreenCover(isPresented: $showsFullScreenArtwork) {
                     FullScreenArtworkViewer(artwork: artwork)
+                        .presentationBackground(.clear)
                 }
             } else {
                 ContentUnavailableView("Artwork not found", systemImage: "questionmark.circle")
@@ -174,6 +198,23 @@ private struct FullScreenArtworkViewer: View {
                     .accessibilityAction(.escape) {
                         dismiss()
                     }
+
+                VStack {
+                    HStack {
+                        AppBackButton(
+                            foregroundColor: .white,
+                            backgroundColor: .black.opacity(0.42)
+                        ) {
+                            dismiss()
+                        }
+
+                        Spacer()
+                    }
+
+                    Spacer()
+                }
+                .padding(.horizontal, 10)
+                .padding(.top, 6)
             }
             .contentShape(Rectangle())
         }

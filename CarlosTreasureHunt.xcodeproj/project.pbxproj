@@ -254,7 +254,7 @@
 				DEVELOPMENT_TEAM = 2V5QBX3YZG;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Carlo's Treasure Hunt";
+				INFOPLIST_KEY_CFBundleDisplayName = "Carlo's TH";
 				INFOPLIST_KEY_NSCameraUsageDescription = "La camera serve per scansionare gli indizi della caccia al tesoro in realta aumentata.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -289,7 +289,7 @@
 				DEVELOPMENT_TEAM = 2V5QBX3YZG;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Carlo's Treasure Hunt";
+				INFOPLIST_KEY_CFBundleDisplayName = "Carlo's TH";
 				INFOPLIST_KEY_NSCameraUsageDescription = "La camera serve per scansionare gli indizi della caccia al tesoro in realta aumentata.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

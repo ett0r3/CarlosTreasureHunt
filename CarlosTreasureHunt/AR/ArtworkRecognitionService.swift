@@ -17,7 +17,7 @@ final class ArtworkRecognitionService {
 
     private let minimumConfidence: Double
 
-    init(minimumConfidence: Double = 0.80) {
+    init(minimumConfidence: Double = 0.85) {
         self.minimumConfidence = minimumConfidence
     }
 

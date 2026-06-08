@@ -70,7 +70,10 @@ struct OnboardingView: View {
             VStack {
                 HStack {
                     if pageIndex > 0 {
-                        IntroBackButton {
+                        AppBackButton(
+                            foregroundColor: Color(red: 0.16, green: 0.14, blue: 0.12),
+                            backgroundColor: .white.opacity(0.88)
+                        ) {
                             withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) {
                                 pageIndex -= 1
                             }
@@ -134,11 +137,10 @@ private struct IntroArtworkPage: View {
                     .clipped()
                     .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
 
-                Text(page.text)
-                    .font(.system(size: page.fontSize, weight: .semibold, design: .rounded))
-                    .multilineTextAlignment(.center)
-                    .minimumScaleFactor(0.72)
-                    .foregroundStyle(Color(red: 0.06, green: 0.05, blue: 0.05))
+                TypewriterBubbleText(
+                    text: page.text,
+                    fontSize: page.fontSize
+                )
                     .padding(.horizontal, 8)
                     .frame(
                         width: proxy.size.width * page.textFrame.width,
@@ -151,6 +153,60 @@ private struct IntroArtworkPage: View {
             }
         }
         .ignoresSafeArea()
+    }
+}
+
+private struct TypewriterBubbleText: View {
+    let text: String
+    let fontSize: CGFloat
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var visibleCharacterCount = 0
+
+    private let ink = Color(red: 0.06, green: 0.05, blue: 0.05)
+
+    private var animatedText: AttributedString {
+        var result = AttributedString(text)
+        result.foregroundColor = ink
+
+        let hiddenStart = result.characters.index(
+            result.startIndex,
+            offsetBy: min(visibleCharacterCount, result.characters.count)
+        )
+        if hiddenStart < result.endIndex {
+            result[hiddenStart..<result.endIndex].foregroundColor = .clear
+        }
+
+        return result
+    }
+
+    var body: some View {
+        Text(animatedText)
+            .font(.system(size: fontSize, weight: .semibold, design: .rounded))
+            .multilineTextAlignment(.center)
+            .minimumScaleFactor(0.72)
+            .accessibilityLabel(text)
+            .task(id: text) {
+                visibleCharacterCount = reduceMotion ? text.count : 0
+                guard !reduceMotion else { return }
+
+                let characters = Array(text)
+                for index in characters.indices {
+                    guard !Task.isCancelled else { return }
+                    visibleCharacterCount = index + 1
+
+                    let pause: UInt64 = characters[index].isTypewriterPunctuation
+                        ? 72_000_000
+                        : 24_000_000
+                    try? await Task.sleep(nanoseconds: pause)
+                }
+            }
+    }
+}
+
+private extension Character {
+    var isTypewriterPunctuation: Bool {
+        ".,!?;:…".contains(self)
     }
 }
 
@@ -185,23 +241,6 @@ private struct NameEntryPage: View {
             Spacer()
         }
         .padding(.horizontal, 18)
-    }
-}
-
-private struct IntroBackButton: View {
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: "chevron.left")
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(Color(red: 0.16, green: 0.14, blue: 0.12))
-                .frame(width: 34, height: 34)
-                .background(Circle().fill(.white.opacity(0.88)))
-                .shadow(color: .black.opacity(0.08), radius: 8, y: 4)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Back")
     }
 }
 

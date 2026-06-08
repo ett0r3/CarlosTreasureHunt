@@ -157,7 +157,7 @@ final class GameStore: ObservableObject {
     }
 
     func canOpenMission(_ mission: MissionCollection) -> Bool {
-        mission.id == missions.first?.id || canAccessGallery
+        mission.id == missions.first?.id
     }
 
     func openCurrentTarget(in mission: MissionCollection? = nil) {
@@ -254,12 +254,11 @@ final class GameStore: ObservableObject {
         let wasAlreadyUnlocked = progress.unlockedArtworkIDs.contains(artwork.id)
         progress.unlockedArtworkIDs.insert(artwork.id)
 
-        if !wasAlreadyUnlocked {
-            let lockedIndices = Set(mission.artworks.indices).subtracting(progress.unlockedPhraseSlotIndices)
-
-            if let randomIndex = lockedIndices.randomElement() {
-                progress.unlockedPhraseSlotIndices.insert(randomIndex)
-            }
+        if
+            !wasAlreadyUnlocked,
+            let artworkIndex = mission.artworks.firstIndex(where: { $0.id == artwork.id })
+        {
+            progress.unlockedPhraseSlotIndices.insert(artworkIndex)
         }
 
         progressByMissionID[mission.id] = progress
@@ -317,17 +316,11 @@ final class GameStore: ObservableObject {
 
             let validArtworkIDs = Set(mission.artworks.map(\.id))
             progress.unlockedArtworkIDs = progress.unlockedArtworkIDs.intersection(validArtworkIDs)
-            progress.unlockedPhraseSlotIndices = progress.unlockedPhraseSlotIndices.intersection(Set(mission.artworks.indices))
-
-            while progress.unlockedPhraseSlotIndices.count < progress.unlockedArtworkIDs.count {
-                let lockedIndices = Set(mission.artworks.indices).subtracting(progress.unlockedPhraseSlotIndices)
-
-                if let randomIndex = lockedIndices.randomElement() {
-                    progress.unlockedPhraseSlotIndices.insert(randomIndex)
-                } else {
-                    break
+            progress.unlockedPhraseSlotIndices = Set(
+                mission.artworks.indices.filter { index in
+                    progress.unlockedArtworkIDs.contains(mission.artworks[index].id)
                 }
-            }
+            )
 
             progressByMissionID[mission.id] = progress
         }

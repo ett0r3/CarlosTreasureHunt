@@ -156,15 +156,7 @@ private struct GalleryHeader: View {
     var body: some View {
         ZStack(alignment: .leading) {
             if showsBackButton {
-                Button(action: backAction) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 17, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 36, height: 36)
-                        .background(Circle().fill(Color.white.opacity(0.22)))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Back")
+                AppBackButton(action: backAction)
             }
 
             VStack(spacing: 4) {
@@ -247,14 +239,27 @@ private struct MissionCollectionCard: View {
                 }
             }
             .aspectRatio(1.02, contentMode: .fit)
+            .overlay(alignment: .topLeading) {
+                if isAvailable {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 27, weight: .semibold))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, GameTheme.gold)
+                        .padding(8)
+                }
+            }
 
-            Text(mission.title)
+            Text(isAvailable ? mission.title : "Coming soon")
                 .font(.system(size: 13, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
 
-            Text(isCompleted ? "Complete" : (isStarted ? progressText : "Ready"))
+            Text(
+                isAvailable
+                    ? (isCompleted ? "Complete" : (isStarted ? progressText : "Ready"))
+                    : "Locked"
+            )
                 .font(.system(size: 11, weight: .bold, design: .rounded))
                 .foregroundStyle(.white.opacity(0.78))
         }

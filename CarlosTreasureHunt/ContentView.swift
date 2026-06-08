@@ -64,6 +64,23 @@ private struct HomeView: View {
                     )
 
                 VStack(spacing: 0) {
+                    Spacer()
+
+                    LinearGradient(
+                        colors: [
+                            GameTheme.royalPurple.opacity(0),
+                            GameTheme.royalPurple.opacity(0.42),
+                            GameTheme.deepPurple.opacity(0.92)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: proxy.size.height * 0.42)
+                }
+                .ignoresSafeArea()
+                .allowsHitTesting(false)
+
+                VStack(spacing: 0) {
                     Text("Carlo's\nTreasure\nHunt")
                         .font(.system(size: 50, weight: .black, design: .rounded))
                         .multilineTextAlignment(.center)
