@@ -20,40 +20,55 @@ struct ARScannerView: View {
     @State private var recognitionStartedAt: Date?
     @State private var lastMatchingRecognitionAt: Date?
     @State private var recognitionProgress = 0.0
+    @State private var hintElapsed: TimeInterval
+    @State private var lastHintTimerTick: Date?
+    @State private var isHintAvailable: Bool
+    @State private var showsHintOverlay: Bool
     let artworkID: UUID
     private let usesLiveCamera: Bool
     private let recognitionTimer = Timer.publish(every: 0.05, on: .main, in: .common).autoconnect()
 
     private static let requiredRecognitionDuration: TimeInterval = 4
     private static let recognitionFreshnessInterval: TimeInterval = 0.75
+    private static let hintDelay: TimeInterval = 15
 
     init(
         artworkID: UUID,
         usesLiveCamera: Bool = true,
         showsTutorial: Bool = true,
-        previewTutorialStep: Int? = nil
+        previewTutorialStep: Int? = nil,
+        previewHintStep: Int? = nil
     ) {
         self.artworkID = artworkID
         self.usesLiveCamera = usesLiveCamera
 
         let initialStage: ARTutorialStage
-        switch previewTutorialStep {
-        case 1:
-            initialStage = .cameraHint
-        case 2:
-            initialStage = .referenceHint
-        case 3:
-            initialStage = .ready
-        case 4:
+        if previewHintStep != nil {
             initialStage = .completed
-        default:
-            initialStage = showsTutorial ? .find : .completed
+        } else {
+            switch previewTutorialStep {
+            case 1:
+                initialStage = .cameraHint
+            case 2:
+                initialStage = .referenceHint
+            case 3:
+                initialStage = .ready
+            case 4:
+                initialStage = .completed
+            default:
+                initialStage = showsTutorial ? .find : .completed
+            }
         }
 
         _tutorialStage = State(initialValue: initialStage)
         _showsReferenceImage = State(
-            initialValue: initialStage != .referenceHint
+            initialValue: previewHintStep == nil && initialStage != .referenceHint
         )
+        let previewShowsHint = previewHintStep == 1 || previewHintStep == 2
+        _hintElapsed = State(initialValue: previewShowsHint ? Self.hintDelay : 0)
+        _lastHintTimerTick = State(initialValue: nil)
+        _isHintAvailable = State(initialValue: previewShowsHint)
+        _showsHintOverlay = State(initialValue: previewHintStep == 2)
     }
 
     private var isShowingTutorial: Bool {
@@ -99,9 +114,16 @@ struct ARScannerView: View {
                     isSwapHighlighted: tutorialStage == .cameraHint || tutorialStage == .referenceHint,
                     recognitionProgress: recognitionProgress,
                     showsRecognitionProgress: tutorialStage == .completed && !showsReferenceImage && !didCompleteRecognition,
+                    showsHintButton: isHintAvailable &&
+                        tutorialStage == .completed &&
+                        !showsReferenceImage &&
+                        !didCompleteRecognition &&
+                        !showsHintOverlay,
                     namespace: swapNamespace
                 ) {
                     handleSwapButtonTap()
+                } hintAction: {
+                    showHint()
                 }
                 .ignoresSafeArea()
             } else {
@@ -178,11 +200,24 @@ struct ARScannerView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
             }
+
+            if
+                showsHintOverlay,
+                let artwork = game.artwork(with: artworkID)
+            {
+                ScannerHintOverlay(artwork: artwork) {
+                    hideHint()
+                }
+                .ignoresSafeArea()
+                .transition(.opacity)
+                .zIndex(20)
+            }
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .onReceive(recognitionTimer) { now in
             updateRecognitionProgress(at: now)
+            updateHintAvailability(at: now)
         }
     }
 
@@ -248,6 +283,7 @@ struct ARScannerView: View {
         guard
             tutorialStage == .completed,
             !showsReferenceImage,
+            !showsHintOverlay,
             !didCompleteRecognition
         else {
             return
@@ -274,6 +310,7 @@ struct ARScannerView: View {
         guard
             tutorialStage == .completed,
             !showsReferenceImage,
+            !showsHintOverlay,
             !didCompleteRecognition,
             let recognitionStartedAt,
             let lastMatchingRecognitionAt
@@ -301,6 +338,53 @@ struct ARScannerView: View {
 
         withAnimation(.easeOut(duration: 0.16)) {
             recognitionProgress = 0
+        }
+    }
+
+    private func updateHintAvailability(at now: Date) {
+        guard
+            tutorialStage == .completed,
+            !showsReferenceImage,
+            !showsHintOverlay,
+            !didCompleteRecognition,
+            !isHintAvailable
+        else {
+            lastHintTimerTick = nil
+            return
+        }
+
+        guard let lastHintTimerTick else {
+            self.lastHintTimerTick = now
+            return
+        }
+
+        hintElapsed += now.timeIntervalSince(lastHintTimerTick)
+        self.lastHintTimerTick = now
+
+        if hintElapsed >= Self.hintDelay {
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.78)) {
+                isHintAvailable = true
+            }
+            self.lastHintTimerTick = nil
+        }
+    }
+
+    private func showHint() {
+        guard isHintAvailable, !didCompleteRecognition else {
+            return
+        }
+
+        resetRecognitionProgress()
+        lastHintTimerTick = nil
+
+        withAnimation(.easeInOut(duration: 0.24)) {
+            showsHintOverlay = true
+        }
+    }
+
+    private func hideHint() {
+        withAnimation(.easeInOut(duration: 0.22)) {
+            showsHintOverlay = false
         }
     }
 
@@ -494,8 +578,10 @@ private struct MagnifyingScannerOverlay: View {
     let isSwapHighlighted: Bool
     let recognitionProgress: Double
     let showsRecognitionProgress: Bool
+    let showsHintButton: Bool
     let namespace: Namespace.ID
     let swapAction: () -> Void
+    let hintAction: () -> Void
 
     var body: some View {
         GeometryReader { proxy in
@@ -503,6 +589,10 @@ private struct MagnifyingScannerOverlay: View {
             let lensOpeningSize = ScannerLensGeometry.openingSize(in: proxy.size)
             let lensCenterY = proxy.size.height / 2
             let swapCenter = ScannerLensGeometry.swapCenter(
+                in: proxy.size,
+                lensSize: lensSize
+            )
+            let hintCenter = ScannerLensGeometry.hintCenter(
                 in: proxy.size,
                 lensSize: lensSize
             )
@@ -550,10 +640,25 @@ private struct MagnifyingScannerOverlay: View {
                     height: ScannerLensGeometry.swapButtonSize
                 )
                 .position(swapCenter)
+
+                if showsHintButton {
+                    ScannerHintButton(action: hintAction)
+                        .frame(
+                            width: ScannerLensGeometry.hintButtonSize,
+                            height: ScannerLensGeometry.hintButtonSize
+                        )
+                        .position(hintCenter)
+                        .transition(
+                            .scale(scale: 0.55)
+                                .combined(with: .opacity)
+                        )
+                        .zIndex(3)
+                }
             }
         }
         .animation(.easeInOut(duration: 0.22), value: showsReferenceImage)
         .animation(.easeInOut(duration: 0.18), value: isSwapBubbleDipped)
+        .animation(.spring(response: 0.42, dampingFraction: 0.78), value: showsHintButton)
     }
 }
 
@@ -564,6 +669,7 @@ private enum ScannerLensGeometry {
     static let outerRadius: CGFloat = 294.5
     static let openingDiameter: CGFloat = 515
     static let swapButtonSize: CGFloat = 86
+    static let hintButtonSize: CGFloat = 82
 
     static let assetAspectRatio = assetHeight / assetWidth
     static let circleCenterOffsetRatio = (assetHeight / 2 - circleCenterY) / assetWidth
@@ -585,6 +691,111 @@ private enum ScannerLensGeometry {
                 (lensSize * outerRadiusRatio) -
                 (swapButtonSize * 0.2)
         )
+    }
+
+    static func hintCenter(in size: CGSize, lensSize: CGFloat) -> CGPoint {
+        CGPoint(
+            x: size.width / 2,
+            y: (size.height / 2) -
+                (lensSize * outerRadiusRatio) +
+                (hintButtonSize * 0.18)
+        )
+    }
+}
+
+private struct ScannerHintButton: View {
+    let accessibilityLabel: String
+    let action: () -> Void
+
+    init(
+        accessibilityLabel: String = "Show a hint",
+        action: @escaping () -> Void
+    ) {
+        self.accessibilityLabel = accessibilityLabel
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 1.0, green: 0.90, blue: 0.48),
+                                Color(red: 1.0, green: 0.67, blue: 0.0)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(color: GameTheme.gold.opacity(0.46), radius: 15, y: 5)
+
+                Image(systemName: "lightbulb")
+                    .font(.system(size: 38, weight: .medium))
+                    .foregroundStyle(Color(red: 0.55, green: 0.35, blue: 0.0))
+                    .symbolEffect(.pulse, options: .repeating.speed(0.55))
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
+private struct ScannerHintOverlay: View {
+    let artwork: ArtworkTarget
+    let dismissAction: () -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color(red: 1.0, green: 0.68, blue: 0.02)
+                    .opacity(0.78)
+                    .contentShape(Rectangle())
+                    .onTapGesture {}
+
+                VStack(spacing: -42) {
+                    ScannerHintButton(
+                        accessibilityLabel: "Close hint",
+                        action: dismissAction
+                    )
+                        .frame(
+                            width: ScannerLensGeometry.hintButtonSize,
+                            height: ScannerLensGeometry.hintButtonSize
+                        )
+                        .zIndex(1)
+
+                    Text(attributedHint)
+                        .font(.system(size: 28, weight: .regular, design: .rounded))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color(red: 0.72, green: 0.47, blue: 0.0))
+                        .lineSpacing(4)
+                        .minimumScaleFactor(0.74)
+                        .padding(.horizontal, 30)
+                        .padding(.top, 76)
+                        .padding(.bottom, 44)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 38)
+                                .fill(Color(red: 1.0, green: 0.97, blue: 0.90))
+                                .shadow(color: .black.opacity(0.12), radius: 22, y: 12)
+                        )
+                }
+                .frame(width: min(proxy.size.width - 48, 340))
+                .position(x: proxy.size.width / 2, y: proxy.size.height * 0.51)
+            }
+        }
+        .accessibilityElement(children: .contain)
+    }
+
+    private var attributedHint: AttributedString {
+        var result = AttributedString(artwork.hintText)
+
+        if let emphasisRange = result.range(of: artwork.hintEmphasis) {
+            result[emphasisRange].font = .system(size: 28, weight: .black, design: .rounded)
+        }
+
+        return result
     }
 }
 
@@ -1053,6 +1264,15 @@ struct ARScannerView_Previews: PreviewProvider {
 
             preview(step: 2)
                 .previewDisplayName("A-11 Reference button")
+
+            hintPreview(step: 0)
+                .previewDisplayName("A-14 Scanner")
+
+            hintPreview(step: 1)
+                .previewDisplayName("A-15 Hint available")
+
+            hintPreview(step: 2)
+                .previewDisplayName("A-16 Hint overlay")
         }
     }
 
@@ -1062,6 +1282,18 @@ struct ARScannerView_Previews: PreviewProvider {
                 artworkID: PreviewSupport.firstArtwork.id,
                 usesLiveCamera: false,
                 previewTutorialStep: step
+            )
+        }
+        .environmentObject(PreviewSupport.game)
+    }
+
+    private static func hintPreview(step: Int) -> some View {
+        NavigationStack {
+            ARScannerView(
+                artworkID: PreviewSupport.firstArtwork.id,
+                usesLiveCamera: false,
+                showsTutorial: false,
+                previewHintStep: step
             )
         }
         .environmentObject(PreviewSupport.game)

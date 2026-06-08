@@ -14,6 +14,8 @@ struct ArtworkTarget: Identifiable, Hashable {
     let targetTitle: String
     let targetDescription: String
     let narratorPrompt: String
+    let hintText: String
+    let hintEmphasis: String
     let unlockedWord: String
     let order: Int
     let imageAssetName: String?
@@ -100,6 +102,8 @@ extension MissionCollection {
                     targetTitle: "Detail \(order)",
                     targetDescription: "Frame detail \(order) with the camera to unlock the artwork and one word of the secret phrase.",
                     narratorPrompt: "Find detail \(order): it is the next step in this collection.",
+                    hintText: artworkContent.hintText,
+                    hintEmphasis: artworkContent.hintEmphasis,
                     unlockedWord: word,
                     order: order,
                     imageAssetName: artworkAssetName,
@@ -114,27 +118,37 @@ extension MissionCollection {
         DemoArtworkContent(
             title: "Madonna col Bambino e due angeli",
             artist: "Sandro Botticelli",
-            funFact: "Did you know? Botticelli was not his real last name: the painter's name was Alessandro Filipepi! \"Botticelli\" was a family nickname."
+            funFact: "Did you know? Botticelli was not his real last name: the painter's name was Alessandro Filipepi! \"Botticelli\" was a family nickname.",
+            hintText: "The next clue is hidden near a king!",
+            hintEmphasis: "near a king!"
         ),
         DemoArtworkContent(
             title: "Ritratto del cardinale Alessandro Farnese, futuro papa Paolo III",
             artist: "Raffaello Sanzio",
-            funFact: "Alessandro Farnese became cardinal at just 14 years old!"
+            funFact: "Alessandro Farnese became cardinal at just 14 years old!",
+            hintText: "Look for the detail near a hand.",
+            hintEmphasis: "near a hand."
         ),
         DemoArtworkContent(
             title: "Flowers, Fruit with a Woman Picking Grapes",
             artist: "Christian Berentz and Carlo Maratta",
-            funFact: "This painting is the work of two artists: Berentz painted the fruit and flowers, while the woman was created by Carlo Maratta!"
+            funFact: "This painting is the work of two artists: Berentz painted the fruit and flowers, while the woman was created by Carlo Maratta!",
+            hintText: "Look among the fruit and flowers.",
+            hintEmphasis: "fruit and flowers."
         ),
         DemoArtworkContent(
             title: "Misantropo",
             artist: "Pieter Bruegel il Vecchio",
-            funFact: "Look closely: the misanthrope thinks he is wise, but he is the only one who doesn't notice the theft."
+            funFact: "Look closely: the misanthrope thinks he is wise, but he is the only one who doesn't notice the theft.",
+            hintText: "Search close to the hidden thief.",
+            hintEmphasis: "hidden thief."
         ),
         DemoArtworkContent(
             title: "Danae",
             artist: "Tiziano Vecellio",
-            funFact: "Did you know? During World War II, this work was stolen by the Nazis and found in a salt mine in Austria!"
+            funFact: "Did you know? During World War II, this work was stolen by the Nazis and found in a salt mine in Austria!",
+            hintText: "Follow the golden light in the scene.",
+            hintEmphasis: "golden light."
         )
     ]
 
@@ -147,4 +161,20 @@ private struct DemoArtworkContent {
     let title: String
     let artist: String
     let funFact: String
+    let hintText: String
+    let hintEmphasis: String
+
+    init(
+        title: String,
+        artist: String,
+        funFact: String,
+        hintText: String = "Look closely around the figures in the artwork.",
+        hintEmphasis: String = "around the figures"
+    ) {
+        self.title = title
+        self.artist = artist
+        self.funFact = funFact
+        self.hintText = hintText
+        self.hintEmphasis = hintEmphasis
+    }
 }
