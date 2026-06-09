@@ -1,17 +1,9 @@
 //
-//  ClueDetailView.swift
+//  TargetDetailView.swift
 //  CarlosTreasureHunt
 //
 
 import SwiftUI
-
-struct ClueDetailView: View {
-    let clueID: UUID
-
-    var body: some View {
-        TargetDetailView(artworkID: clueID)
-    }
-}
 
 struct TargetDetailView: View {
     @EnvironmentObject private var game: GameStore

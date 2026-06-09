@@ -13,12 +13,14 @@ struct WordRevealView: View {
         ZStack {
             PurpleGameBackground(raysOpacity: 0.22)
 
-            if let artwork = game.artwork(with: artworkID), let mission = game.mission(containing: artworkID) {
+            if
+                let artwork = game.artwork(with: artworkID),
+                let mission = game.mission(containing: artworkID),
+                game.isUnlocked(artwork)
+            {
                 GeometryReader { proxy in
-                    VStack(spacing: 0) {
-                        Spacer(minLength: proxy.size.height * 0.18)
-
-                        Text(artwork.unlockedWord.uppercased())
+                    ZStack {
+                        Text(game.unlockedWord(for: artwork).uppercased())
                             .font(.system(size: 34, weight: .black, design: .rounded))
                             .foregroundStyle(Color(red: 0.55, green: 0.35, blue: 0.02))
                             .minimumScaleFactor(0.64)
@@ -29,24 +31,30 @@ struct WordRevealView: View {
                                     .fill(GameTheme.goldGradient)
                                     .shadow(color: Color(red: 0.96, green: 0.74, blue: 0.20).opacity(0.42), radius: 24, y: 10)
                             )
+                            .position(
+                                x: proxy.size.width / 2,
+                                y: proxy.size.height / 2
+                            )
 
-                        Spacer()
+                        VStack(spacing: 0) {
+                            Spacer()
 
-                        RewardCarloBubble(
-                            boldLead: "Good job, Explorer!",
-                            message: "You found the \(ordinalText(for: artwork.order)) word!"
-                        )
-                        .padding(.horizontal, 22)
-                        .padding(.bottom, 18)
+                            RewardCarloBubble(
+                                boldLead: "Good job, \(game.displayName)!",
+                                message: "You found the \(ordinalText(for: game.unlockedWordPosition(for: artwork))) word!"
+                            )
+                            .padding(.horizontal, 22)
+                            .padding(.bottom, 18)
 
-                        PhraseProgressView(slots: game.phraseSlots(for: mission))
-                            .padding(.horizontal, 24)
+                            PhraseProgressView(slots: game.phraseSlots(for: mission))
+                                .padding(.horizontal, 24)
+                                .padding(.bottom, 28)
+
+                            RewardNextButton {
+                                game.continueAfterWordReveal(for: artwork)
+                            }
                             .padding(.bottom, 28)
-
-                        RewardNextButton {
-                            game.continueAfterWordReveal(for: artwork)
                         }
-                        .padding(.bottom, 28)
                     }
                     .frame(width: proxy.size.width, height: proxy.size.height)
                 }
@@ -77,12 +85,16 @@ struct ArtworkRevealView: View {
     @EnvironmentObject private var game: GameStore
     @State private var showsFullScreenArtwork = false
     let artworkID: UUID
+    var continuesToWordReveal = true
 
     var body: some View {
         ZStack {
             PurpleGameBackground(raysOpacity: 0.22)
 
-            if let artwork = game.artwork(with: artworkID) {
+            if
+                let artwork = game.artwork(with: artworkID),
+                game.isUnlocked(artwork)
+            {
                 GeometryReader { proxy in
                     let compact = proxy.size.height < 760
                     let imageHeight = min(
@@ -90,32 +102,7 @@ struct ArtworkRevealView: View {
                         compact ? 255 : 360
                     )
 
-                    VStack(spacing: 0) {
-                        Text(artwork.title)
-                            .font(.system(
-                                size: compact ? 21 : 24,
-                                weight: .black,
-                                design: .rounded
-                            ))
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(.white)
-                            .lineLimit(3)
-                            .minimumScaleFactor(0.7)
-                            .padding(.top, compact ? 16 : 28)
-                            .padding(.horizontal, 24)
-
-                        Text("by \(artwork.artist)")
-                            .font(.system(
-                                size: compact ? 12 : 13,
-                                weight: .black,
-                                design: .rounded
-                            ))
-                            .foregroundStyle(.white)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.75)
-                            .padding(.top, compact ? 7 : 10)
-                            .padding(.horizontal, 24)
-
+                    ZStack {
                         Button {
                             showsFullScreenArtwork = true
                         } label: {
@@ -129,22 +116,55 @@ struct ArtworkRevealView: View {
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("View \(artwork.title) full screen")
-                        .padding(.horizontal, 24)
-                        .padding(.top, compact ? 12 : 20)
-
-                        Spacer(minLength: compact ? 8 : 16)
-
-                        RewardCarloBubble(
-                            boldLead: "Fun fact:",
-                            message: artwork.artworkDescription
+                        .position(
+                            x: proxy.size.width / 2,
+                            y: proxy.size.height / 2
                         )
-                        .padding(.horizontal, compact ? 16 : 22)
-                        .padding(.bottom, compact ? 10 : 16)
 
-                        RewardNextButton {
-                            game.continueAfterArtworkReveal(for: artwork)
+                        VStack(spacing: 0) {
+                            Text(artwork.title)
+                                .font(.system(
+                                    size: compact ? 21 : 24,
+                                    weight: .black,
+                                    design: .rounded
+                                ))
+                                .multilineTextAlignment(.center)
+                                .foregroundStyle(.white)
+                                .lineLimit(3)
+                                .minimumScaleFactor(0.7)
+                                .padding(.top, compact ? 16 : 28)
+                                .padding(.horizontal, 24)
+
+                            Text("by \(artwork.artist)")
+                                .font(.system(
+                                    size: compact ? 12 : 13,
+                                    weight: .black,
+                                    design: .rounded
+                                ))
+                                .foregroundStyle(.white)
+                                .lineLimit(2)
+                                .minimumScaleFactor(0.75)
+                                .padding(.top, compact ? 7 : 10)
+                                .padding(.horizontal, 24)
+
+                            Spacer()
+
+                            RewardCarloBubble(
+                                boldLead: "Fun fact:",
+                                message: artwork.artworkDescription
+                            )
+                            .padding(.horizontal, compact ? 16 : 22)
+                            .padding(.bottom, compact ? 10 : 16)
+
+                            RewardNextButton {
+                                if continuesToWordReveal {
+                                    game.continueAfterArtworkReveal(for: artwork)
+                                } else {
+                                    game.finishReopenedArtwork(for: artwork)
+                                }
+                            }
+                            .padding(.bottom, compact ? 12 : 22)
                         }
-                        .padding(.bottom, compact ? 12 : 22)
                     }
                     .frame(width: proxy.size.width, height: proxy.size.height)
                 }
@@ -160,18 +180,23 @@ struct ArtworkRevealView: View {
     }
 }
 
-private struct FullScreenArtworkViewer: View {
+struct FullScreenArtworkViewer: View {
     @Environment(\.dismiss) private var dismiss
-    @State private var dragOffset: CGSize = .zero
+    @State private var zoomScale: CGFloat = 1
+    @State private var lastZoomScale: CGFloat = 1
+    @State private var panOffset: CGSize = .zero
+    @State private var lastPanOffset: CGSize = .zero
+    @State private var dismissalOffset: CGSize = .zero
     @State private var isDismissing = false
+    @State private var isChromeVisible = true
 
     let artwork: ArtworkTarget
 
     private var dragDistance: CGFloat {
-        hypot(dragOffset.width, dragOffset.height)
+        hypot(dismissalOffset.width, dismissalOffset.height)
     }
 
-    private var imageScale: CGFloat {
+    private var dismissalScale: CGFloat {
         max(0.82, 1 - dragDistance / 1_100)
     }
 
@@ -189,14 +214,21 @@ private struct FullScreenArtworkViewer: View {
                 FullArtworkImage(artwork: artwork)
                     .scaledToFit()
                     .frame(
-                        maxWidth: proxy.size.width - 24,
-                        maxHeight: proxy.size.height - 48
+                        maxWidth: max(0, proxy.size.width - 24),
+                        maxHeight: max(0, proxy.size.height - 48)
                     )
-                    .scaleEffect(imageScale)
-                    .offset(dragOffset)
-                    .gesture(dismissGesture(in: proxy.size))
+                    .scaleEffect(zoomScale * dismissalScale)
+                    .offset(
+                        x: panOffset.width + dismissalOffset.width,
+                        y: panOffset.height + dismissalOffset.height
+                    )
+                    .gesture(dragGesture(in: proxy.size))
+                    .simultaneousGesture(zoomGesture)
+                    .onTapGesture(count: 2) {
+                        toggleZoom()
+                    }
                     .accessibilityAction(.escape) {
-                        dismiss()
+                        dismissWithFade()
                     }
 
                 VStack {
@@ -205,7 +237,7 @@ private struct FullScreenArtworkViewer: View {
                             foregroundColor: .white,
                             backgroundColor: .black.opacity(0.42)
                         ) {
-                            dismiss()
+                            dismissWithFade()
                         }
 
                         Spacer()
@@ -215,22 +247,53 @@ private struct FullScreenArtworkViewer: View {
                 }
                 .padding(.horizontal, 10)
                 .padding(.top, 6)
+                .opacity(isChromeVisible ? max(0, 1 - dragDistance / 90) : 0)
             }
             .contentShape(Rectangle())
         }
         .statusBarHidden()
     }
 
-    private func dismissGesture(in viewportSize: CGSize) -> some Gesture {
+    private var zoomGesture: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                guard !isDismissing else {
+                    return
+                }
+
+                zoomScale = min(max(lastZoomScale * value.magnification, 1), 5)
+            }
+            .onEnded { _ in
+                lastZoomScale = zoomScale
+
+                if zoomScale <= 1.01 {
+                    resetZoom()
+                }
+            }
+    }
+
+    private func dragGesture(in viewportSize: CGSize) -> some Gesture {
         DragGesture(minimumDistance: 4, coordinateSpace: .global)
             .onChanged { value in
                 guard !isDismissing else {
                     return
                 }
 
-                dragOffset = value.translation
+                if zoomScale > 1.01 {
+                    panOffset = CGSize(
+                        width: lastPanOffset.width + value.translation.width,
+                        height: lastPanOffset.height + value.translation.height
+                    )
+                } else {
+                    dismissalOffset = value.translation
+                }
             }
             .onEnded { value in
+                if zoomScale > 1.01 {
+                    lastPanOffset = panOffset
+                    return
+                }
+
                 let predictedDistance = hypot(
                     value.predictedEndTranslation.width,
                     value.predictedEndTranslation.height
@@ -238,12 +301,15 @@ private struct FullScreenArtworkViewer: View {
 
                 guard dragDistance > 120 || predictedDistance > 220 else {
                     withAnimation(.spring(response: 0.38, dampingFraction: 0.82)) {
-                        dragOffset = .zero
+                        dismissalOffset = .zero
                     }
                     return
                 }
 
                 isDismissing = true
+                withAnimation(.easeOut(duration: 0.12)) {
+                    isChromeVisible = false
+                }
                 let direction = dismissalDirection(
                     translation: value.predictedEndTranslation,
                     fallback: value.translation
@@ -251,7 +317,7 @@ private struct FullScreenArtworkViewer: View {
                 let travel = max(viewportSize.width, viewportSize.height) * 1.25
 
                 withAnimation(.easeIn(duration: 0.20)) {
-                    dragOffset = CGSize(
+                    dismissalOffset = CGSize(
                         width: direction.width * travel,
                         height: direction.height * travel
                     )
@@ -261,6 +327,45 @@ private struct FullScreenArtworkViewer: View {
                     dismiss()
                 }
             }
+    }
+
+    private func toggleZoom() {
+        guard !isDismissing else {
+            return
+        }
+
+        if zoomScale > 1.01 {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                resetZoom()
+            }
+        } else {
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                zoomScale = 2.5
+                lastZoomScale = 2.5
+            }
+        }
+    }
+
+    private func resetZoom() {
+        zoomScale = 1
+        lastZoomScale = 1
+        panOffset = .zero
+        lastPanOffset = .zero
+    }
+
+    private func dismissWithFade() {
+        guard !isDismissing else {
+            return
+        }
+
+        isDismissing = true
+        withAnimation(.easeOut(duration: 0.16)) {
+            isChromeVisible = false
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
+            dismiss()
+        }
     }
 
     private func dismissalDirection(translation: CGSize, fallback: CGSize) -> CGSize {
@@ -329,36 +434,20 @@ private struct RewardCarloBubble: View {
 
 private struct CarloBadge: View {
     var body: some View {
-        ZStack {
-            Circle()
-                .fill(Color(red: 0.96, green: 0.70, blue: 0.06))
-
-            Circle()
-                .fill(Color(red: 1.0, green: 0.92, blue: 0.82))
-                .frame(width: 42, height: 42)
-                .offset(y: -3)
-
-            Circle()
-                .fill(Color(red: 1.0, green: 0.66, blue: 0.36))
-                .frame(width: 31, height: 31)
-                .offset(y: 2)
-
-            HStack(spacing: 8) {
-                Capsule()
-                    .fill(Color(red: 0.02, green: 0.05, blue: 0.08))
-                    .frame(width: 5, height: 13)
-
-                Capsule()
-                    .fill(Color(red: 0.02, green: 0.05, blue: 0.08))
-                    .frame(width: 5, height: 13)
+        Image("carlo-finger")
+            .resizable()
+            .scaledToFill()
+            .frame(width: 58, height: 58)
+            .clipShape(Circle())
+            .overlay {
+                Circle()
+                    .stroke(Color(red: 1.0, green: 0.78, blue: 0.18), lineWidth: 3)
             }
-            .offset(y: -1)
-
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(red: 0.02, green: 0.28, blue: 0.78))
-                .frame(width: 28, height: 18)
-                .offset(y: 28)
-        }
+            .background {
+                Circle()
+                    .fill(Color(red: 0.96, green: 0.70, blue: 0.06))
+            }
+            .shadow(color: .black.opacity(0.18), radius: 8, y: 4)
     }
 }
 
@@ -370,7 +459,7 @@ private struct RewardNextButton: View {
     }
 }
 
-private struct FullArtworkImage: View {
+struct FullArtworkImage: View {
     let artwork: ArtworkTarget
 
     var body: some View {
@@ -413,14 +502,17 @@ struct ScanSuccessView_Previews: PreviewProvider {
             NavigationStack {
                 WordRevealView(artworkID: PreviewSupport.firstArtwork.id)
             }
-            .environmentObject(PreviewSupport.game)
+            .environmentObject(PreviewSupport.inProgressGame)
             .previewDisplayName("Word Reveal")
 
             NavigationStack {
                 ArtworkRevealView(artworkID: PreviewSupport.firstArtwork.id)
             }
-            .environmentObject(PreviewSupport.game)
+            .environmentObject(PreviewSupport.inProgressGame)
             .previewDisplayName("Artwork Reveal")
+
+            FullScreenArtworkViewer(artwork: PreviewSupport.firstArtwork)
+                .previewDisplayName("Full Screen Artwork")
 
             ZStack {
                 PurpleGameBackground()

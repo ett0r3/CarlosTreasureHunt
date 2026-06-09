@@ -14,37 +14,47 @@ struct OnboardingView: View {
         [
             IntroPage(
                 assetName: "carlo-intro1",
-                text: "Hello Explorer! I am Carlo di Borbone. Welcome to Museo di Capodimonte. What's your name?",
+                text: "Hello! I am Carlo Di Borbone.\nWelcome to\nMuseo di Capodimonte.\nWhat's your name?",
+                boldPhrases: ["Carlo Di Borbone"],
                 textFrame: CGRect(x: 0.22, y: 0.09, width: 0.56, height: 0.22),
                 fontSize: 20
             ),
             IntroPage(
                 assetName: nil,
                 text: "Enter your name!",
+                boldPhrases: [],
                 textFrame: .zero,
                 fontSize: 0
             ),
             IntroPage(
                 assetName: "carlo-intro2",
-                text: "My mother, Elisabetta Farnese, left me an important message, but it got lost. \(game.displayName), I need your help to find it!",
+                text: "My mother,\nElisabetta Farnese,\nleft me important messages, but they got lost. \(game.displayName),\nI need your help\nto find them!",
+                boldPhrases: [
+                    "Elisabetta Farnese",
+                    "important messages",
+                    game.displayName
+                ],
                 textFrame: CGRect(x: 0.22, y: 0.09, width: 0.56, height: 0.22),
                 fontSize: 20
             ),
             IntroPage(
                 assetName: "carlo-intro3",
-                text: "To find it, you'll need to look carefully at the paintings and scan the hidden details you discover along the way...",
+                text: "To find them, you'll need to look carefully at the paintings and scan the hidden details you discover along the way...",
+                boldPhrases: ["scan the hidden details"],
                 textFrame: CGRect(x: 0.22, y: 0.09, width: 0.56, height: 0.22),
                 fontSize: 20
             ),
             IntroPage(
                 assetName: "carlo-intro4",
-                text: "...With this magic magnifying glass!",
+                text: "...With this magic\nmagnifying glass!",
+                boldPhrases: ["magnifying glass!"],
                 textFrame: CGRect(x: 0.22, y: 0.12, width: 0.56, height: 0.22),
                 fontSize: 20
             ),
             IntroPage(
                 assetName: "carlo-intro5",
-                text: "So, \(game.displayName), let me show you how it works...",
+                text: "So, \(game.displayName),\nlet me show you\nhow it works...",
+                boldPhrases: [game.displayName],
                 textFrame: CGRect(x: 0.22, y: 0.10, width: 0.56, height: 0.22),
                 fontSize: 20
             )
@@ -87,7 +97,7 @@ struct OnboardingView: View {
 
                 Spacer()
 
-                IntroNextButton {
+                IntroNextButton(isEnabled: canAdvance) {
                     advance()
                 }
                 .padding(.bottom, 28)
@@ -105,6 +115,10 @@ struct OnboardingView: View {
     }
 
     private func advance() {
+        guard canAdvance else {
+            return
+        }
+
         if pageIndex == pages.count - 1 {
             isNameFocused = false
             game.finishIntro()
@@ -115,11 +129,17 @@ struct OnboardingView: View {
             pageIndex += 1
         }
     }
+
+    private var canAdvance: Bool {
+        pageIndex != 1 ||
+            !game.playerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }
 
 private struct IntroPage {
     let assetName: String?
     let text: String
+    let boldPhrases: [String]
     let textFrame: CGRect
     let fontSize: CGFloat
 }
@@ -139,6 +159,7 @@ private struct IntroArtworkPage: View {
 
                 TypewriterBubbleText(
                     text: page.text,
+                    boldPhrases: page.boldPhrases,
                     fontSize: page.fontSize
                 )
                     .padding(.horizontal, 8)
@@ -156,8 +177,9 @@ private struct IntroArtworkPage: View {
     }
 }
 
-private struct TypewriterBubbleText: View {
+struct TypewriterBubbleText: View {
     let text: String
+    var boldPhrases: [String] = []
     let fontSize: CGFloat
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -168,6 +190,18 @@ private struct TypewriterBubbleText: View {
     private var animatedText: AttributedString {
         var result = AttributedString(text)
         result.foregroundColor = ink
+
+        for phrase in boldPhrases {
+            guard let range = result.range(of: phrase) else {
+                continue
+            }
+
+            result[range].font = .system(
+                size: fontSize,
+                weight: .black,
+                design: .rounded
+            )
+        }
 
         let hiddenStart = result.characters.index(
             result.startIndex,
@@ -245,6 +279,7 @@ private struct NameEntryPage: View {
 }
 
 private struct IntroNextButton: View {
+    var isEnabled = true
     let action: () -> Void
 
     var body: some View {
@@ -260,6 +295,8 @@ private struct IntroNextButton: View {
                 )
         }
         .buttonStyle(.plain)
+        .disabled(!isEnabled)
+        .opacity(isEnabled ? 1 : 0.45)
         .accessibilityLabel("Continue")
     }
 }

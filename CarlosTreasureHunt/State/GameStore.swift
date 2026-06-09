@@ -15,9 +15,12 @@ final class GameStore: ObservableObject {
         static let hasCompletedScannerTutorial = "game.hasCompletedScannerTutorial"
     }
 
+    private let persistsState: Bool
+
     @Published var path: [GameRoute] = []
     @Published var playerName: String = "" {
         didSet {
+            guard persistsState else { return }
             UserDefaults.standard.set(playerName, forKey: PersistenceKey.playerName)
         }
     }
@@ -25,6 +28,8 @@ final class GameStore: ObservableObject {
     @Published private(set) var missions: [MissionCollection]
     @Published private(set) var activeMissionID: UUID? {
         didSet {
+            guard persistsState else { return }
+
             if let activeMissionID {
                 UserDefaults.standard.set(activeMissionID.uuidString, forKey: PersistenceKey.activeMissionID)
             } else {
@@ -34,11 +39,13 @@ final class GameStore: ObservableObject {
     }
     @Published private(set) var hasCompletedOnboarding: Bool {
         didSet {
+            guard persistsState else { return }
             UserDefaults.standard.set(hasCompletedOnboarding, forKey: PersistenceKey.hasCompletedOnboarding)
         }
     }
     @Published private(set) var hasCompletedScannerTutorial: Bool {
         didSet {
+            guard persistsState else { return }
             UserDefaults.standard.set(
                 hasCompletedScannerTutorial,
                 forKey: PersistenceKey.hasCompletedScannerTutorial
@@ -47,19 +54,31 @@ final class GameStore: ObservableObject {
     }
     @Published private(set) var progressByMissionID: [UUID: MissionProgress] = [:] {
         didSet {
+            guard persistsState else { return }
             saveMissionProgress()
         }
     }
 
-    init(missions: [MissionCollection] = MissionCollection.capodimonteDemo) {
+    init(
+        missions: [MissionCollection] = MissionCollection.capodimonteDemo,
+        persistsState: Bool = true
+    ) {
+        self.persistsState = persistsState
         let defaults = UserDefaults.standard
         self.missions = missions
-        self.playerName = defaults.string(forKey: PersistenceKey.playerName) ?? ""
-        self.hasCompletedOnboarding = defaults.bool(forKey: PersistenceKey.hasCompletedOnboarding)
-        self.hasCompletedScannerTutorial = defaults.bool(forKey: PersistenceKey.hasCompletedScannerTutorial)
-        self.progressByMissionID = Self.loadMissionProgress()
+        self.playerName = persistsState
+            ? defaults.string(forKey: PersistenceKey.playerName) ?? ""
+            : ""
+        self.hasCompletedOnboarding = persistsState
+            ? defaults.bool(forKey: PersistenceKey.hasCompletedOnboarding)
+            : false
+        self.hasCompletedScannerTutorial = persistsState
+            ? defaults.bool(forKey: PersistenceKey.hasCompletedScannerTutorial)
+            : false
+        self.progressByMissionID = persistsState ? Self.loadMissionProgress() : [:]
 
         if
+            persistsState,
             let storedMissionID = defaults.string(forKey: PersistenceKey.activeMissionID),
             let missionID = UUID(uuidString: storedMissionID),
             missions.contains(where: { $0.id == missionID })
@@ -74,7 +93,7 @@ final class GameStore: ObservableObject {
 
     var displayName: String {
         let trimmedName = playerName.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmedName.isEmpty ? "Explorer" : trimmedName
+        return trimmedName.isEmpty ? "Player" : trimmedName
     }
 
     var hasCompletedFirstMission: Bool {
@@ -153,7 +172,7 @@ final class GameStore: ObservableObject {
         }
 
         activeMissionID = mission.id
-        path.append(.mission(mission.id))
+        path.append(.galleryMission(mission.id))
     }
 
     func canOpenMission(_ mission: MissionCollection) -> Bool {
@@ -173,16 +192,40 @@ final class GameStore: ObservableObject {
         path.append(.target(artwork.id))
     }
 
+    func openGalleryArtwork(_ artwork: ArtworkTarget) {
+        guard canAccessGallery, isUnlocked(artwork) else {
+            return
+        }
+
+        path.append(.galleryArtwork(artwork.id))
+    }
+
+    func reopenUnlockedArtwork(_ artwork: ArtworkTarget) {
+        guard isUnlocked(artwork) else {
+            return
+        }
+
+        path.append(.reopenedArtwork(artwork.id))
+    }
+
     func openScanner(for artwork: ArtworkTarget) {
         activeMissionID = mission(containing: artwork.id)?.id
         path.append(.scanner(artwork.id))
     }
 
     func continueAfterWordReveal(for artwork: ArtworkTarget) {
-        path = [.artworkReveal(artwork.id)]
+        finishRewardSequence(for: artwork)
     }
 
     func continueAfterArtworkReveal(for artwork: ArtworkTarget) {
+        path = [.wordReveal(artwork.id)]
+    }
+
+    func finishReopenedArtwork(for artwork: ArtworkTarget) {
+        finishRewardSequence(for: artwork)
+    }
+
+    private func finishRewardSequence(for artwork: ArtworkTarget) {
         guard let mission = mission(containing: artwork.id) else {
             openGallery()
             return
@@ -237,11 +280,47 @@ final class GameStore: ObservableObject {
     }
 
     func phraseSlots(for mission: MissionCollection) -> [String?] {
-        let unlockedIndices = progress(for: mission).unlockedPhraseSlotIndices
+        let progress = progress(for: mission)
 
         return mission.artworks.indices.map { index in
-            unlockedIndices.contains(index) ? mission.artworks[index].unlockedWord : nil
+            progress.unlockedPhraseSlotIndices.contains(index)
+                ? mission.artworks[index].unlockedWord
+                : nil
         }
+    }
+
+    func discoveredPhraseText(for mission: MissionCollection) -> String {
+        let discoveredWords = phraseSlots(for: mission)
+            .compactMap { $0?.uppercased() }
+        let missingWords = Array(
+            repeating: "-",
+            count: max(0, mission.artworks.count - discoveredWords.count)
+        )
+
+        return (discoveredWords + missingWords).joined(separator: " ")
+    }
+
+    func unlockedWord(for artwork: ArtworkTarget) -> String {
+        guard
+            let mission = mission(containing: artwork.id),
+            let slotIndex = progress(for: mission).artworkPhraseSlotIndices[artwork.id],
+            mission.artworks.indices.contains(slotIndex)
+        else {
+            return artwork.unlockedWord
+        }
+
+        return mission.artworks[slotIndex].unlockedWord
+    }
+
+    func unlockedWordPosition(for artwork: ArtworkTarget) -> Int {
+        guard
+            let mission = mission(containing: artwork.id),
+            let slotIndex = progress(for: mission).artworkPhraseSlotIndices[artwork.id]
+        else {
+            return artwork.order
+        }
+
+        return slotIndex + 1
     }
 
     func completeScan(for artwork: ArtworkTarget) {
@@ -254,15 +333,19 @@ final class GameStore: ObservableObject {
         let wasAlreadyUnlocked = progress.unlockedArtworkIDs.contains(artwork.id)
         progress.unlockedArtworkIDs.insert(artwork.id)
 
-        if
-            !wasAlreadyUnlocked,
-            let artworkIndex = mission.artworks.firstIndex(where: { $0.id == artwork.id })
-        {
-            progress.unlockedPhraseSlotIndices.insert(artworkIndex)
+        if !wasAlreadyUnlocked {
+            let availableSlots = mission.artworks.indices.filter {
+                !progress.unlockedPhraseSlotIndices.contains($0)
+            }
+
+            if let slotIndex = availableSlots.randomElement() {
+                progress.artworkPhraseSlotIndices[artwork.id] = slotIndex
+                progress.unlockedPhraseSlotIndices.insert(slotIndex)
+            }
         }
 
         progressByMissionID[mission.id] = progress
-        path = [.wordReveal(artwork.id)]
+        path = [.artworkReveal(artwork.id)]
     }
 
     func returnHome() {
@@ -275,11 +358,15 @@ final class GameStore: ObservableObject {
         hasCompletedOnboarding = false
         hasCompletedScannerTutorial = false
         progressByMissionID.removeAll()
-        UserDefaults.standard.removeObject(forKey: PersistenceKey.playerName)
-        UserDefaults.standard.removeObject(forKey: PersistenceKey.missionProgress)
-        UserDefaults.standard.removeObject(forKey: PersistenceKey.activeMissionID)
-        UserDefaults.standard.removeObject(forKey: PersistenceKey.hasCompletedOnboarding)
-        UserDefaults.standard.removeObject(forKey: PersistenceKey.hasCompletedScannerTutorial)
+
+        if persistsState {
+            UserDefaults.standard.removeObject(forKey: PersistenceKey.playerName)
+            UserDefaults.standard.removeObject(forKey: PersistenceKey.missionProgress)
+            UserDefaults.standard.removeObject(forKey: PersistenceKey.activeMissionID)
+            UserDefaults.standard.removeObject(forKey: PersistenceKey.hasCompletedOnboarding)
+            UserDefaults.standard.removeObject(forKey: PersistenceKey.hasCompletedScannerTutorial)
+        }
+
         path = []
     }
 
@@ -316,11 +403,39 @@ final class GameStore: ObservableObject {
 
             let validArtworkIDs = Set(mission.artworks.map(\.id))
             progress.unlockedArtworkIDs = progress.unlockedArtworkIDs.intersection(validArtworkIDs)
-            progress.unlockedPhraseSlotIndices = Set(
-                mission.artworks.indices.filter { index in
-                    progress.unlockedArtworkIDs.contains(mission.artworks[index].id)
+            var normalizedMappings: [UUID: Int] = [:]
+            var assignedSlots: Set<Int> = []
+
+            for artwork in mission.artworks where progress.unlockedArtworkIDs.contains(artwork.id) {
+                guard
+                    let slotIndex = progress.artworkPhraseSlotIndices[artwork.id],
+                    mission.artworks.indices.contains(slotIndex),
+                    !assignedSlots.contains(slotIndex)
+                else {
+                    continue
                 }
-            )
+
+                normalizedMappings[artwork.id] = slotIndex
+                assignedSlots.insert(slotIndex)
+            }
+
+            for artwork in mission.artworks where progress.unlockedArtworkIDs.contains(artwork.id) {
+                guard normalizedMappings[artwork.id] == nil else {
+                    continue
+                }
+
+                guard let slotIndex = mission.artworks.indices.first(where: {
+                    !assignedSlots.contains($0)
+                }) else {
+                    continue
+                }
+
+                normalizedMappings[artwork.id] = slotIndex
+                assignedSlots.insert(slotIndex)
+            }
+
+            progress.artworkPhraseSlotIndices = normalizedMappings
+            progress.unlockedPhraseSlotIndices = assignedSlots
 
             progressByMissionID[mission.id] = progress
         }
@@ -331,7 +446,12 @@ final class GameStore: ObservableObject {
             StoredMissionProgress(
                 missionID: missionID.uuidString,
                 unlockedArtworkIDs: progress.unlockedArtworkIDs.map(\.uuidString),
-                unlockedPhraseSlotIndices: progress.unlockedPhraseSlotIndices.sorted()
+                unlockedPhraseSlotIndices: progress.unlockedPhraseSlotIndices.sorted(),
+                artworkPhraseSlotIndices: Dictionary(
+                    uniqueKeysWithValues: progress.artworkPhraseSlotIndices.map {
+                        ($0.key.uuidString, $0.value)
+                    }
+                )
             )
         }
 
@@ -355,7 +475,16 @@ final class GameStore: ObservableObject {
 
             result[missionID] = MissionProgress(
                 unlockedArtworkIDs: Set(storedProgress.unlockedArtworkIDs.compactMap(UUID.init(uuidString:))),
-                unlockedPhraseSlotIndices: Set(storedProgress.unlockedPhraseSlotIndices)
+                unlockedPhraseSlotIndices: Set(storedProgress.unlockedPhraseSlotIndices),
+                artworkPhraseSlotIndices: Dictionary(
+                    uniqueKeysWithValues: (storedProgress.artworkPhraseSlotIndices ?? [:]).compactMap {
+                        guard let artworkID = UUID(uuidString: $0.key) else {
+                            return nil
+                        }
+
+                        return (artworkID, $0.value)
+                    }
+                )
             )
         }
     }
@@ -364,10 +493,12 @@ final class GameStore: ObservableObject {
 struct MissionProgress: Equatable {
     var unlockedArtworkIDs: Set<UUID> = []
     var unlockedPhraseSlotIndices: Set<Int> = []
+    var artworkPhraseSlotIndices: [UUID: Int] = [:]
 }
 
 private struct StoredMissionProgress: Codable {
     let missionID: String
     let unlockedArtworkIDs: [String]
     let unlockedPhraseSlotIndices: [Int]
+    let artworkPhraseSlotIndices: [String: Int]?
 }

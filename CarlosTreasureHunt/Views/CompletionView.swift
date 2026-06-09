@@ -96,6 +96,7 @@ struct CompletionView_Previews: PreviewProvider {
         NavigationStack {
             CompletionView(missionID: PreviewSupport.firstMission.id)
         }
-        .environmentObject(PreviewSupport.game)
+        .environmentObject(PreviewSupport.completedGame)
+        .previewDisplayName("Mission Completion")
     }
 }

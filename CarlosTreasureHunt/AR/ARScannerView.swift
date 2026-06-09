@@ -20,6 +20,7 @@ struct ARScannerView: View {
     @State private var recognitionStartedAt: Date?
     @State private var lastMatchingRecognitionAt: Date?
     @State private var recognitionProgress = 0.0
+    @State private var isRecognizingTarget = false
     @State private var hintElapsed: TimeInterval
     @State private var lastHintTimerTick: Date?
     @State private var isHintAvailable: Bool
@@ -30,7 +31,7 @@ struct ARScannerView: View {
 
     private static let requiredRecognitionDuration: TimeInterval = 3
     private static let recognitionFreshnessInterval: TimeInterval = 0.75
-    private static let hintDelay: TimeInterval = 15
+    private static let hintDelay: TimeInterval = 5
 
     init(
         artworkID: UUID,
@@ -113,6 +114,7 @@ struct ARScannerView: View {
                     isSwapEnabled: isSwapEnabled,
                     isSwapHighlighted: tutorialStage == .cameraHint || tutorialStage == .referenceHint,
                     recognitionProgress: recognitionProgress,
+                    isRecognizingTarget: isRecognizingTarget,
                     showsRecognitionProgress: tutorialStage == .completed && !showsReferenceImage && !didCompleteRecognition,
                     showsHintButton: isHintAvailable &&
                         tutorialStage == .completed &&
@@ -144,7 +146,7 @@ struct ARScannerView: View {
 
                 case .cameraHint:
                     NumberedARTutorialOverlay(
-                        number: 1,
+                        number: 2,
                         message: "Tap this button to open the camera and scan the hidden detail."
                     )
                     .allowsHitTesting(false)
@@ -153,7 +155,7 @@ struct ARScannerView: View {
 
                 case .referenceHint:
                     NumberedARTutorialOverlay(
-                        number: 2,
+                        number: 3,
                         message: "Press this button whenever you need to view the reference image again."
                     )
                     .allowsHitTesting(false)
@@ -161,7 +163,7 @@ struct ARScannerView: View {
                     .transition(.opacity)
 
                 case .ready:
-                    ScannerReadyOverlay {
+                    ScannerReadyOverlay(playerName: game.displayName) {
                         beginGame()
                     }
                     .ignoresSafeArea()
@@ -172,7 +174,12 @@ struct ARScannerView: View {
                 }
             }
 
-            if DeveloperToolsConfiguration.isSkipScanButtonEnabled && !didCompleteRecognition {
+            if
+                DeveloperToolsConfiguration.isSkipScanButtonEnabled,
+                tutorialStage == .completed,
+                !showsHintOverlay,
+                !didCompleteRecognition
+            {
                 VStack {
                     HStack {
                         Spacer()
@@ -180,16 +187,12 @@ struct ARScannerView: View {
                         Button {
                             skipScanForTesting()
                         } label: {
-                            Label("Skip scan", systemImage: "forward.end.fill")
-                                .font(.system(size: 13, weight: .black, design: .rounded))
-                                .foregroundStyle(GameTheme.ink)
-                                .padding(.horizontal, 14)
-                                .frame(height: 40)
-                                .background(
-                                    Capsule()
-                                        .fill(GameTheme.gold)
-                                        .shadow(color: .black.opacity(0.20), radius: 8, y: 4)
-                                )
+                            Image(systemName: "forward.end.fill")
+                                .font(.system(size: 17, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(width: 40, height: 40)
+                                .background(Circle().fill(.black.opacity(0.34)))
+                                .opacity(0.15)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Skip artwork scan")
@@ -310,11 +313,16 @@ struct ARScannerView: View {
             let result,
             ArtworkRecognitionService().matches(result, target: artwork)
         else {
-            resetRecognitionProgress()
             return
         }
 
         let now = Date()
+
+        if !isRecognizingTarget {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                isRecognizingTarget = true
+            }
+        }
 
         if recognitionStartedAt == nil {
             recognitionStartedAt = now
@@ -355,6 +363,7 @@ struct ARScannerView: View {
 
         withAnimation(.easeOut(duration: 0.16)) {
             recognitionProgress = 0
+            isRecognizingTarget = false
         }
     }
 
@@ -432,30 +441,90 @@ private struct FindTargetTutorialOverlay: View {
 
     var body: some View {
         GeometryReader { proxy in
+            let lensSize = ScannerLensGeometry.lensSize(in: proxy.size)
+            let focusDiameter =
+                (lensSize * ScannerLensGeometry.outerRadiusRatio * 2) + 18
             let lensCenterY = proxy.size.height / 2
+            let messageCenterY = max(
+                126,
+                lensCenterY - (focusDiameter / 2) - 76
+            )
 
             ZStack {
                 Color(red: 0.12, green: 0.10, blue: 0.40)
-                    .opacity(0.20)
-                    .allowsHitTesting(false)
+                    .opacity(0.48)
+                    .mask {
+                        Rectangle()
+                            .overlay {
+                                Circle()
+                                    .frame(
+                                        width: focusDiameter,
+                                        height: focusDiameter
+                                    )
+                                    .position(
+                                        x: proxy.size.width / 2,
+                                        y: lensCenterY
+                                    )
+                                    .blendMode(.destinationOut)
+                            }
+                    }
+                    .compositingGroup()
+
+                VStack(spacing: -18) {
+                    Text("1")
+                        .font(.system(size: 42, weight: .black, design: .rounded))
+                        .foregroundStyle(Color(red: 0.17, green: 0.18, blue: 0.60))
+                        .frame(width: 70, height: 70)
+                        .background(
+                            Circle()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [
+                                            Color(red: 1.0, green: 0.98, blue: 0.87),
+                                            Color(red: 1.0, green: 0.78, blue: 0.24)
+                                        ],
+                                        startPoint: .top,
+                                        endPoint: .bottom
+                                    )
+                                )
+                        )
+                        .zIndex(1)
+
+                    Text("Find this hidden detail")
+                        .font(.system(size: 20, weight: .black, design: .rounded))
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(Color(red: 0.05, green: 0.04, blue: 0.04))
+                        .padding(.horizontal, 24)
+                        .padding(.top, 38)
+                        .padding(.bottom, 26)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color(red: 1.0, green: 0.95, blue: 0.88))
+                                .shadow(color: .black.opacity(0.18), radius: 18, y: 8)
+                        )
+                }
+                    .frame(width: min(proxy.size.width - 48, 310))
+                    .position(x: proxy.size.width / 2, y: messageCenterY)
 
                 Button(action: action) {
-                    ZStack {
-                        Image("star")
-                            .resizable()
-                            .scaledToFit()
-
-                        Text("Find and frame\nthis element!")
-                            .font(.system(size: 25, weight: .black, design: .rounded))
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(Color(red: 0.13, green: 0.16, blue: 0.60))
-                            .minimumScaleFactor(0.72)
-                    }
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 25, weight: .black))
+                        .foregroundStyle(Color(red: 0.47, green: 0.28, blue: 0.0))
+                        .frame(width: 66, height: 66)
+                        .background(
+                            Circle()
+                                .fill(Color(red: 1.0, green: 0.74, blue: 0.0))
+                                .shadow(
+                                    color: Color(red: 0.62, green: 0.32, blue: 0.0).opacity(0.22),
+                                    radius: 9,
+                                    y: 5
+                                )
+                        )
                 }
                 .buttonStyle(.plain)
-                .frame(width: min(proxy.size.width * 0.96, 410))
-                .position(x: proxy.size.width / 2, y: lensCenterY)
-                .accessibilityLabel("Find and frame this element")
+                .position(x: proxy.size.width / 2, y: proxy.size.height - 62)
+                .accessibilityLabel("Continue")
             }
         }
     }
@@ -532,6 +601,7 @@ private struct NumberedARTutorialOverlay: View {
 }
 
 private struct ScannerReadyOverlay: View {
+    let playerName: String
     let action: () -> Void
 
     var body: some View {
@@ -553,20 +623,20 @@ private struct ScannerReadyOverlay: View {
                     .clipped()
                     .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
 
-                VStack(spacing: 6) {
-                    Text("Okay, Explorer!")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-
-                    Text("Now you're all set.")
-                        .font(.system(size: 15, weight: .semibold, design: .rounded))
-
-                    Text("Let's begin!")
-                        .font(.system(size: 19, weight: .black, design: .rounded))
-                }
-                .multilineTextAlignment(.center)
-                .foregroundStyle(Color(red: 0.06, green: 0.05, blue: 0.05))
-                .frame(width: proxy.size.width * 0.60, height: proxy.size.height * 0.18)
-                .position(x: proxy.size.width * 0.50, y: proxy.size.height * 0.20)
+                TypewriterBubbleText(
+                    text: "Okay, \(playerName)!\nNow you're all set.\nLet's begin!",
+                    boldPhrases: ["Let's begin!"],
+                    fontSize: 20
+                )
+                .padding(.horizontal, 8)
+                .frame(
+                    width: proxy.size.width * 0.56,
+                    height: proxy.size.height * 0.22
+                )
+                .position(
+                    x: proxy.size.width * 0.50,
+                    y: proxy.size.height * 0.20
+                )
 
                 Button(action: action) {
                     Image(systemName: "chevron.right")
@@ -581,7 +651,7 @@ private struct ScannerReadyOverlay: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Begin")
-                .position(x: proxy.size.width - 62, y: proxy.size.height - 62)
+                .position(x: proxy.size.width / 2, y: proxy.size.height - 62)
             }
         }
     }
@@ -594,6 +664,7 @@ private struct MagnifyingScannerOverlay: View {
     let isSwapEnabled: Bool
     let isSwapHighlighted: Bool
     let recognitionProgress: Double
+    let isRecognizingTarget: Bool
     let showsRecognitionProgress: Bool
     let showsHintButton: Bool
     let namespace: Namespace.ID
@@ -633,7 +704,10 @@ private struct MagnifyingScannerOverlay: View {
                     .allowsHitTesting(false)
 
                 if showsRecognitionProgress {
-                    MagicalRecognitionRing(progress: recognitionProgress)
+                    MagicalRecognitionRing(
+                        progress: recognitionProgress,
+                        isRecognizingTarget: isRecognizingTarget
+                    )
                         .frame(
                             width: lensOpeningSize - 22,
                             height: lensOpeningSize - 22
@@ -641,6 +715,16 @@ private struct MagnifyingScannerOverlay: View {
                         .position(x: proxy.size.width / 2, y: lensCenterY)
                         .transition(.opacity)
                         .allowsHitTesting(false)
+
+                    RecognitionStatusBadge(
+                        isRecognizingTarget: isRecognizingTarget
+                    )
+                    .position(
+                        x: proxy.size.width / 2,
+                        y: lensCenterY + (lensOpeningSize * 0.30)
+                    )
+                    .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                    .allowsHitTesting(false)
                 }
 
                 SwapPreviewButton(
@@ -818,6 +902,7 @@ private struct ScannerHintOverlay: View {
 
 private struct MagicalRecognitionRing: View {
     let progress: Double
+    let isRecognizingTarget: Bool
 
     var body: some View {
         TimelineView(.animation) { timeline in
@@ -836,7 +921,18 @@ private struct MagicalRecognitionRing: View {
 
                 ZStack {
                     Circle()
-                        .stroke(Color.white.opacity(0.18), lineWidth: lineWidth)
+                        .stroke(
+                            isRecognizingTarget
+                                ? Color(red: 0.15, green: 0.86, blue: 0.42).opacity(0.72)
+                                : Color(red: 0.48, green: 0.12, blue: 0.72).opacity(0.72 + pulse * 0.22),
+                            lineWidth: lineWidth
+                        )
+                        .shadow(
+                            color: isRecognizingTarget
+                                ? Color(red: 0.05, green: 0.82, blue: 0.39).opacity(0.55)
+                                : Color(red: 0.56, green: 0.20, blue: 0.82).opacity(0.50),
+                            radius: 5 + pulse * 3
+                        )
 
                     Circle()
                         .trim(from: 0, to: max(clampedProgress, 0.002))
@@ -857,9 +953,10 @@ private struct MagicalRecognitionRing: View {
                             color: Color(red: 0.05, green: 0.82, blue: 0.39).opacity(0.9),
                             radius: 8
                         )
+                        .opacity(isRecognizingTarget ? 1 : 0.24)
                         .animation(.linear(duration: 0.08), value: clampedProgress)
 
-                    if clampedProgress > 0 {
+                    if clampedProgress > 0 && isRecognizingTarget {
                         ZStack {
                             Circle()
                                 .fill(Color.white.opacity(0.92))
@@ -890,6 +987,38 @@ private struct MagicalRecognitionRing: View {
             }
         }
         .accessibilityHidden(true)
+    }
+}
+
+private struct RecognitionStatusBadge: View {
+    let isRecognizingTarget: Bool
+
+    private var statusColor: Color {
+        isRecognizingTarget
+            ? Color(red: 0.06, green: 0.72, blue: 0.34)
+            : Color(red: 0.96, green: 0.39, blue: 0.02)
+    }
+
+    var body: some View {
+        Label(
+            isRecognizingTarget ? "Target found - hold still" : "Keep looking",
+            systemImage: isRecognizingTarget ? "checkmark.circle.fill" : "viewfinder"
+        )
+        .font(.system(size: 14, weight: .black, design: .rounded))
+        .foregroundStyle(.white)
+        .padding(.horizontal, 14)
+        .frame(height: 38)
+        .background(
+            Capsule()
+                .fill(statusColor.opacity(0.94))
+                .shadow(color: statusColor.opacity(0.38), radius: 8, y: 3)
+        )
+        .animation(.easeInOut(duration: 0.18), value: isRecognizingTarget)
+        .accessibilityLabel(
+            isRecognizingTarget
+                ? "Target found. Hold still."
+                : "Keep looking for the target."
+        )
     }
 }
 
@@ -976,7 +1105,6 @@ private struct ReferenceScannerSurface: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let lensSize = ScannerLensGeometry.lensSize(in: proxy.size)
             let lensCenterY = proxy.size.height / 2
             let referenceSize = ScannerLensGeometry.openingSize(in: proxy.size)
 
@@ -1001,13 +1129,6 @@ private struct ReferenceScannerSurface: View {
                     .frame(width: referenceSize, height: referenceSize)
                     .clipShape(Circle())
                     .position(x: proxy.size.width / 2, y: lensCenterY)
-
-                Text(artwork.targetTitle)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.92))
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 22)
-                    .position(x: proxy.size.width / 2, y: max(72, lensCenterY - (lensSize / 2) - 34))
             }
         }
     }
@@ -1311,8 +1432,14 @@ struct ARScannerView_Previews: PreviewProvider {
             preview(step: 2)
                 .previewDisplayName("A-11 Reference button")
 
+            preview(step: 3)
+                .previewDisplayName("A-12 Ready")
+
+            preview(step: 4)
+                .previewDisplayName("A-13 Scanner")
+
             hintPreview(step: 0)
-                .previewDisplayName("A-14 Scanner")
+                .previewDisplayName("A-14 Keep looking")
 
             hintPreview(step: 1)
                 .previewDisplayName("A-15 Hint available")

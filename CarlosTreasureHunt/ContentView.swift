@@ -20,7 +20,11 @@ struct ContentView: View {
                     case .gallery:
                         MissionGalleryView()
                     case .mission(let missionID):
-                        MissionDetailView(missionID: missionID)
+                        MissionDetailView(missionID: missionID, isGalleryMode: false)
+                    case .galleryMission(let missionID):
+                        MissionDetailView(missionID: missionID, isGalleryMode: true)
+                    case .galleryArtwork(let artworkID):
+                        GalleryArtworkDetailView(artworkID: artworkID)
                     case .target(let artworkID):
                         TargetDetailView(artworkID: artworkID)
                     case .scanner(let artworkID):
@@ -32,6 +36,11 @@ struct ContentView: View {
                         WordRevealView(artworkID: artworkID)
                     case .artworkReveal(let artworkID):
                         ArtworkRevealView(artworkID: artworkID)
+                    case .reopenedArtwork(let artworkID):
+                        ArtworkRevealView(
+                            artworkID: artworkID,
+                            continuesToWordReveal: false
+                        )
                     case .completion(let missionID):
                         CompletionView(missionID: missionID)
                     }
@@ -56,7 +65,7 @@ private struct HomeView: View {
                 Image("carlo-intro0")
                     .resizable()
                     .scaledToFill()
-                    .frame(width: fullWidth + 20, height: fullHeight + 20)
+                    .frame(width: fullWidth, height: fullHeight)
                     .clipped()
                     .position(
                         x: (proxy.size.width + proxy.safeAreaInsets.trailing - proxy.safeAreaInsets.leading) / 2,
@@ -64,32 +73,21 @@ private struct HomeView: View {
                     )
 
                 VStack(spacing: 0) {
-                    Spacer()
-
-                    LinearGradient(
-                        colors: [
-                            GameTheme.royalPurple.opacity(0),
-                            GameTheme.royalPurple.opacity(0.42),
-                            GameTheme.deepPurple.opacity(0.92)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
+                    VStack(spacing: -14) {
+                        Text("Carlo's")
+                        Text("Treasure")
+                        Text("Hunt")
+                    }
+                    .font(.system(size: 58, weight: .black, design: .rounded))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Color(red: 1.0, green: 0.94, blue: 0.82))
+                    .shadow(color: .black.opacity(0.16), radius: 8, y: 5)
+                    .minimumScaleFactor(0.72)
+                    .frame(
+                        width: proxy.size.width,
+                        height: proxy.size.height * 0.27,
+                        alignment: .center
                     )
-                    .frame(height: proxy.size.height * 0.42)
-                }
-                .ignoresSafeArea()
-                .allowsHitTesting(false)
-
-                VStack(spacing: 0) {
-                    Text("Carlo's\nTreasure\nHunt")
-                        .font(.system(size: 50, weight: .black, design: .rounded))
-                        .multilineTextAlignment(.center)
-                        .lineSpacing(-7)
-                        .foregroundStyle(Color(red: 1.0, green: 0.94, blue: 0.82))
-                        .shadow(color: .black.opacity(0.16), radius: 8, y: 5)
-                        .padding(.top, 42)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .minimumScaleFactor(0.72)
 
                     Spacer()
 
@@ -112,6 +110,7 @@ private struct HomeView: View {
                                 .foregroundStyle(.white)
                                 .frame(width: 40, height: 40)
                                 .background(Circle().fill(.black.opacity(0.34)))
+                                .opacity(0.15)
                         }
                         .buttonStyle(.plain)
                         .accessibilityLabel("Reset test data")
@@ -176,7 +175,16 @@ private struct HomeCircleButton: View {
             .background(
                 Circle()
                     .fill(Color(red: 1.0, green: 0.75, blue: 0.02))
-                    .shadow(color: Color(red: 0.50, green: 0.22, blue: 0.0).opacity(0.28), radius: 9, y: 5)
+                    .shadow(
+                        color: Color(red: 0.10, green: 0.04, blue: 0.32).opacity(0.52),
+                        radius: 38,
+                        y: 14
+                    )
+                    .shadow(
+                        color: Color(red: 0.16, green: 0.06, blue: 0.42).opacity(0.30),
+                        radius: 18,
+                        y: 8
+                    )
             )
         }
         .buttonStyle(.plain)
@@ -186,7 +194,18 @@ private struct HomeCircleButton: View {
 
 struct ContentView_Previews: PreviewProvider {
     static var previews: some View {
-        ContentView()
-            .environmentObject(PreviewSupport.game)
+        Group {
+            NavigationStack {
+                HomeView()
+            }
+                .environmentObject(PreviewSupport.game)
+                .previewDisplayName("Home - New game")
+
+            NavigationStack {
+                HomeView()
+            }
+                .environmentObject(PreviewSupport.completedGame)
+                .previewDisplayName("Home - Gallery unlocked")
+        }
     }
 }

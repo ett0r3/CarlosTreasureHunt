@@ -34,11 +34,6 @@ struct MissionGalleryView: View {
                         dismiss()
                     }
 
-                    MissionStars(
-                        filledCount: game.missions.filter { game.completedCount(for: $0) > 0 }.count,
-                        totalCount: game.missions.count
-                    )
-
                     ScrollView(showsIndicators: false) {
                         LazyVGrid(columns: columns, spacing: 14) {
                             ForEach(game.missions) { mission in
@@ -81,6 +76,7 @@ struct MissionDetailView: View {
     @EnvironmentObject private var game: GameStore
     @Environment(\.dismiss) private var dismiss
     let missionID: UUID
+    let isGalleryMode: Bool
 
     private let columns = [
         GridItem(.flexible(), spacing: 14),
@@ -98,7 +94,7 @@ struct MissionDetailView: View {
                 VStack(spacing: 16) {
                     GalleryHeader(
                         title: mission.title,
-                        subtitle: "\"History comes alive with you!\"",
+                        subtitle: game.discoveredPhraseText(for: mission),
                         showsBackButton: true
                     ) {
                         dismiss()
@@ -108,17 +104,32 @@ struct MissionDetailView: View {
                         LazyVGrid(columns: columns, spacing: 18) {
                             ForEach(mission.artworks) { artwork in
                                 Button {
-                                    if game.isUnlocked(artwork) || artwork.id == game.currentArtwork(in: mission)?.id {
+                                    if isGalleryMode, game.isUnlocked(artwork) {
+                                        game.openGalleryArtwork(artwork)
+                                    } else if !isGalleryMode, game.isUnlocked(artwork) {
+                                        game.reopenUnlockedArtwork(artwork)
+                                    } else if
+                                        !isGalleryMode,
+                                        artwork.id == game.currentArtwork(in: mission)?.id
+                                    {
                                         game.openTarget(artwork)
                                     }
                                 } label: {
                                     MissionArtworkCard(
                                         artwork: artwork,
                                         isUnlocked: game.isUnlocked(artwork),
-                                        isCurrent: artwork.id == game.currentArtwork(in: mission)?.id
+                                        isCurrent: !isGalleryMode &&
+                                            !game.isMissionCompleted(mission) &&
+                                            artwork.id == game.currentArtwork(in: mission)?.id
                                     )
                                 }
                                 .buttonStyle(.plain)
+                                .disabled(
+                                    isGalleryMode
+                                        ? !game.isUnlocked(artwork)
+                                        : !game.isUnlocked(artwork) &&
+                                            artwork.id != game.currentArtwork(in: mission)?.id
+                                )
                             }
                         }
                         .padding(.horizontal, 24)
@@ -144,6 +155,108 @@ struct MissionDetailView: View {
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+struct GalleryArtworkDetailView: View {
+    @EnvironmentObject private var game: GameStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var showsFullScreenArtwork = false
+    let artworkID: UUID
+
+    var body: some View {
+        ZStack {
+            PurpleGameBackground(raysOpacity: 0.12)
+
+            if
+                let artwork = game.artwork(with: artworkID),
+                game.isUnlocked(artwork)
+            {
+                ScrollView(showsIndicators: false) {
+                    VStack(spacing: 20) {
+                        GalleryHeader(
+                            title: artwork.title,
+                            subtitle: artwork.galleryName,
+                            showsBackButton: true
+                        ) {
+                            dismiss()
+                        }
+
+                        Button {
+                            showsFullScreenArtwork = true
+                        } label: {
+                            FullArtworkImage(artwork: artwork)
+                                .scaledToFit()
+                                .frame(maxWidth: 350, maxHeight: 420)
+                                .shadow(color: .black.opacity(0.28), radius: 20, y: 12)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("View \(artwork.title) full screen")
+                        .padding(.horizontal, 24)
+
+                        VStack(alignment: .leading, spacing: 18) {
+                            ArtworkInformationRow(
+                                label: "Artist",
+                                value: artwork.artist
+                            )
+
+                            ArtworkInformationRow(
+                                label: "Date",
+                                value: artwork.creationDate
+                            )
+
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("About the artwork")
+                                    .font(.system(size: 13, weight: .black, design: .rounded))
+                                    .foregroundStyle(GameTheme.royalPurple)
+
+                                Text(artwork.detailedDescription)
+                                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                    .foregroundStyle(GameTheme.ink)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                        .padding(20)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 18)
+                                .fill(GameTheme.cream)
+                                .shadow(color: .black.opacity(0.14), radius: 16, y: 8)
+                        )
+                        .padding(.horizontal, 22)
+                        .padding(.bottom, 32)
+                    }
+                }
+                .fullScreenCover(isPresented: $showsFullScreenArtwork) {
+                    FullScreenArtworkViewer(artwork: artwork)
+                        .presentationBackground(.clear)
+                }
+            } else {
+                ContentUnavailableView("Artwork unavailable", systemImage: "lock.fill")
+                    .foregroundStyle(.white)
+            }
+        }
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .navigationBar)
+    }
+}
+
+private struct ArtworkInformationRow: View {
+    let label: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label)
+                .font(.system(size: 13, weight: .black, design: .rounded))
+                .foregroundStyle(GameTheme.royalPurple)
+
+            Text(value)
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundStyle(GameTheme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 
@@ -182,27 +295,6 @@ private struct GalleryHeader: View {
     }
 }
 
-private struct MissionStars: View {
-    let filledCount: Int
-    let totalCount: Int
-
-    var body: some View {
-        HStack(spacing: -2) {
-            ForEach(0..<totalCount, id: \.self) { index in
-                ZStack {
-                    Circle()
-                        .fill(index < filledCount ? Color(red: 1.0, green: 0.72, blue: 0.0) : Color(red: 0.53, green: 0.45, blue: 0.96))
-                        .frame(width: 28, height: 28)
-
-                    Image(systemName: "star.fill")
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(.white)
-                }
-            }
-        }
-    }
-}
-
 private struct MissionCollectionCard: View {
     let mission: MissionCollection
     let progressText: String
@@ -216,7 +308,7 @@ private struct MissionCollectionCard: View {
                 RoundedRectangle(cornerRadius: 7)
                     .fill(
                         LinearGradient(
-                            colors: isAvailable ? [
+                            colors: isAvailable && !isCompleted ? [
                                 Color(red: 1.0, green: 0.82, blue: 0.12),
                                 Color(red: 0.86, green: 0.62, blue: 0.08)
                             ] : [
@@ -228,7 +320,11 @@ private struct MissionCollectionCard: View {
                         )
                     )
 
-                if isAvailable {
+                if isCompleted {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 50, weight: .black))
+                        .foregroundStyle(Color(red: 1.0, green: 0.72, blue: 0.0))
+                } else if isAvailable {
                     GalleryThumbnailPlaceholder(title: mission.title)
                         .clipShape(RoundedRectangle(cornerRadius: 6))
                         .padding(6)
@@ -239,21 +335,13 @@ private struct MissionCollectionCard: View {
                 }
             }
             .aspectRatio(1.02, contentMode: .fit)
-            .overlay(alignment: .topLeading) {
-                if isAvailable {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 27, weight: .semibold))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, GameTheme.gold)
-                        .padding(8)
-                }
-            }
 
             Text(isAvailable ? mission.title : "Coming soon")
                 .font(.system(size: 13, weight: .black, design: .rounded))
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.72)
+                .padding(.bottom, -5)
 
             Text(
                 isAvailable
@@ -278,13 +366,22 @@ private struct MissionArtworkCard: View {
                     RoundedRectangle(cornerRadius: 7)
                         .fill(Color.white.opacity(isUnlocked || isCurrent ? 0.18 : 0.12))
 
-                    if isUnlocked || isCurrent {
+                    if isUnlocked {
                         GalleryArtworkImage(artwork: artwork)
                             .scaledToFill()
                             .frame(width: proxy.size.width, height: proxy.size.height)
                             .clipped()
-                            .saturation(isUnlocked ? 1 : 0.15)
-                            .opacity(isUnlocked ? 1 : 0.72)
+                    } else if isCurrent {
+                        VStack(spacing: 10) {
+                            Image(systemName: "viewfinder")
+                                .font(.system(size: 42, weight: .black))
+
+                            Text("Find the next detail")
+                                .font(.system(size: 12, weight: .black, design: .rounded))
+                                .multilineTextAlignment(.center)
+                        }
+                        .foregroundStyle(Color(red: 1.0, green: 0.76, blue: 0.08))
+                        .padding(16)
                     } else {
                         Image(systemName: "lock.fill")
                             .font(.system(size: 42, weight: .black))
@@ -312,12 +409,13 @@ private struct MissionArtworkCard: View {
                 }
             }
 
-            Text(isUnlocked || isCurrent ? artwork.title : "Locked")
+            Text(isUnlocked ? artwork.title : (isCurrent ? "Next target" : "Locked"))
                 .font(.system(size: 13, weight: .black, design: .rounded))
+                .multilineTextAlignment(.center)
                 .foregroundStyle(.white)
-                .lineLimit(1)
+                .lineLimit(3)
                 .minimumScaleFactor(0.7)
-                .frame(maxWidth: .infinity, minHeight: 18, maxHeight: 18)
+                .frame(maxWidth: .infinity, minHeight: 48, maxHeight: 48, alignment: .top)
         }
     }
 }
@@ -366,13 +464,39 @@ struct HuntMapView_Previews: PreviewProvider {
                 MissionGalleryView()
             }
             .environmentObject(PreviewSupport.game)
-            .previewDisplayName("Mission Gallery")
+            .previewDisplayName("Mission Gallery - Locked")
 
             NavigationStack {
-                MissionDetailView(missionID: PreviewSupport.firstMission.id)
+                MissionGalleryView()
             }
-            .environmentObject(PreviewSupport.game)
-            .previewDisplayName("Mission Detail")
+            .environmentObject(PreviewSupport.completedGame)
+            .previewDisplayName("Mission Gallery - Unlocked")
+
+            NavigationStack {
+                MissionDetailView(
+                    missionID: PreviewSupport.firstMission.id,
+                    isGalleryMode: false
+                )
+            }
+            .environmentObject(PreviewSupport.inProgressGame)
+            .previewDisplayName("Mission Detail - Hunt")
+
+            NavigationStack {
+                MissionDetailView(
+                    missionID: PreviewSupport.firstMission.id,
+                    isGalleryMode: true
+                )
+            }
+            .environmentObject(PreviewSupport.completedGame)
+            .previewDisplayName("Mission Detail - Gallery")
+
+            NavigationStack {
+                GalleryArtworkDetailView(
+                    artworkID: PreviewSupport.firstArtwork.id
+                )
+            }
+            .environmentObject(PreviewSupport.completedGame)
+            .previewDisplayName("Gallery Artwork Detail")
         }
     }
 }
