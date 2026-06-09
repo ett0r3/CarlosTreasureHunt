@@ -75,30 +75,6 @@ struct GoldCircleButton: View {
     }
 }
 
-struct AppBackButton: View {
-    var foregroundColor: Color = .white
-    var backgroundColor: Color = .white.opacity(0.20)
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            ZStack {
-                Circle()
-                    .fill(backgroundColor)
-                    .frame(width: 34, height: 34)
-
-                Image(systemName: "chevron.left")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(foregroundColor)
-            }
-            .frame(width: 44, height: 44)
-            .contentShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Back")
-    }
-}
-
 struct RadialRays: View {
     var body: some View {
         ZStack {

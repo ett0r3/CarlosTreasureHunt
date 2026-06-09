@@ -13,7 +13,6 @@ struct HuntMapView: View {
 
 struct MissionGalleryView: View {
     @EnvironmentObject private var game: GameStore
-    @Environment(\.dismiss) private var dismiss
 
     private let columns = [
         GridItem(.flexible(), spacing: 14),
@@ -28,11 +27,8 @@ struct MissionGalleryView: View {
                 VStack(spacing: 14) {
                     GalleryHeader(
                         title: "My Missions\nCollection",
-                        subtitle: nil,
-                        showsBackButton: true
-                    ) {
-                        dismiss()
-                    }
+                        subtitle: nil
+                    )
 
                     ScrollView(showsIndicators: false) {
                         LazyVGrid(columns: columns, spacing: 14) {
@@ -68,13 +64,13 @@ struct MissionGalleryView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .tint(.white)
     }
 }
 
 struct MissionDetailView: View {
     @EnvironmentObject private var game: GameStore
-    @Environment(\.dismiss) private var dismiss
     let missionID: UUID
     let isGalleryMode: Bool
 
@@ -94,11 +90,8 @@ struct MissionDetailView: View {
                 VStack(spacing: 16) {
                     GalleryHeader(
                         title: mission.title,
-                        subtitle: game.discoveredPhraseText(for: mission),
-                        showsBackButton: !isGalleryMode
-                    ) {
-                        dismiss()
-                    }
+                        subtitle: game.discoveredPhraseText(for: mission)
+                    )
 
                     ScrollView(showsIndicators: false) {
                         LazyVGrid(columns: columns, spacing: 18) {
@@ -154,7 +147,6 @@ struct MissionDetailView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(isGalleryMode ? .visible : .hidden, for: .navigationBar)
         .toolbarBackground(.hidden, for: .navigationBar)
         .tint(.white)
     }
@@ -162,7 +154,6 @@ struct MissionDetailView: View {
 
 struct GalleryArtworkDetailView: View {
     @EnvironmentObject private var game: GameStore
-    @Environment(\.dismiss) private var dismiss
     @State private var showsFullScreenArtwork = false
     let artworkID: UUID
 
@@ -178,11 +169,8 @@ struct GalleryArtworkDetailView: View {
                     VStack(spacing: 20) {
                         GalleryHeader(
                             title: artwork.title,
-                            subtitle: artwork.galleryName,
-                            showsBackButton: true
-                        ) {
-                            dismiss()
-                        }
+                            subtitle: artwork.galleryName
+                        )
 
                         Button {
                             showsFullScreenArtwork = true
@@ -240,7 +228,8 @@ struct GalleryArtworkDetailView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .tint(.white)
     }
 }
 
@@ -265,15 +254,9 @@ private struct ArtworkInformationRow: View {
 private struct GalleryHeader: View {
     let title: String
     let subtitle: String?
-    let showsBackButton: Bool
-    let backAction: () -> Void
 
     var body: some View {
-        ZStack(alignment: .leading) {
-            if showsBackButton {
-                AppBackButton(action: backAction)
-            }
-
+        ZStack {
             VStack(spacing: 4) {
                 Text(title)
                     .font(.system(size: 24, weight: .black, design: .rounded))

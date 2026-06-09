@@ -260,7 +260,7 @@ struct ArtworkRevealView: View {
                                 FullArtworkImage(artwork: artwork)
                                     .scaledToFit()
                                     .frame(
-                                        maxWidth: min(proxy.size.width - 48, 340),
+                                        maxWidth: max(0, min(proxy.size.width - 48, 340)),
                                         maxHeight: imageHeight
                                     )
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -329,51 +329,52 @@ struct FullScreenArtworkViewer: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            ZStack {
-                Color.black
-                    .opacity(backdropOpacity)
-                    .ignoresSafeArea()
+        NavigationStack {
+            GeometryReader { proxy in
+                ZStack {
+                    Color.black
+                        .opacity(backdropOpacity)
+                        .ignoresSafeArea()
 
-                FullArtworkImage(artwork: artwork)
-                    .scaledToFit()
-                    .frame(
-                        maxWidth: max(0, proxy.size.width - 24),
-                        maxHeight: max(0, proxy.size.height - 48)
-                    )
-                    .scaleEffect(zoomScale * dismissalScale)
-                    .offset(
-                        x: panOffset.width + dismissalOffset.width,
-                        y: panOffset.height + dismissalOffset.height
-                    )
-                    .gesture(dragGesture(in: proxy.size))
-                    .simultaneousGesture(zoomGesture)
-                    .onTapGesture(count: 2) {
-                        toggleZoom()
-                    }
-                    .accessibilityAction(.escape) {
-                        dismissWithFade()
-                    }
-
-                VStack {
-                    HStack {
-                        AppBackButton(
-                            foregroundColor: .white,
-                            backgroundColor: .black.opacity(0.42)
-                        ) {
+                    FullArtworkImage(artwork: artwork)
+                        .scaledToFit()
+                        .frame(
+                            maxWidth: max(0, proxy.size.width - 24),
+                            maxHeight: max(0, proxy.size.height - 48)
+                        )
+                        .scaleEffect(zoomScale * dismissalScale)
+                        .offset(
+                            x: panOffset.width + dismissalOffset.width,
+                            y: panOffset.height + dismissalOffset.height
+                        )
+                        .gesture(dragGesture(in: proxy.size))
+                        .simultaneousGesture(zoomGesture)
+                        .onTapGesture(count: 2) {
+                            toggleZoom()
+                        }
+                        .accessibilityAction(.escape) {
                             dismissWithFade()
                         }
-
-                        Spacer()
-                    }
-
-                    Spacer()
                 }
-                .padding(.horizontal, 10)
-                .padding(.top, 6)
-                .opacity(isChromeVisible ? max(0, 1 - dragDistance / 90) : 0)
+                .contentShape(Rectangle())
             }
-            .contentShape(Rectangle())
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        dismissWithFade()
+                    } label: {
+                        Label("Back", systemImage: "chevron.left")
+                            .labelStyle(.iconOnly)
+                    }
+                    .tint(.white)
+                    .opacity(isChromeVisible ? max(0, 1 - dragDistance / 90) : 0)
+                    .disabled(!isChromeVisible)
+                }
+            }
         }
         .statusBarHidden()
     }

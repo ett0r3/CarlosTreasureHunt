@@ -78,23 +78,6 @@ struct OnboardingView: View {
             }
 
             VStack {
-                HStack {
-                    if pageIndex > 0 {
-                        AppBackButton(
-                            foregroundColor: Color(red: 0.16, green: 0.14, blue: 0.12),
-                            backgroundColor: .white.opacity(0.88)
-                        ) {
-                            withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) {
-                                pageIndex -= 1
-                            }
-                        }
-                    }
-
-                    Spacer()
-                }
-                .padding(.horizontal, 18)
-                .padding(.top, 8)
-
                 Spacer()
 
                 IntroNextButton(isEnabled: canAdvance) {
@@ -105,7 +88,22 @@ struct OnboardingView: View {
         }
         .navigationTitle("")
         .navigationBarBackButtonHidden(true)
-        .toolbar(.hidden, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                if pageIndex > 0 {
+                    Button {
+                        withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) {
+                            pageIndex -= 1
+                        }
+                    } label: {
+                        Label("Back", systemImage: "chevron.left")
+                            .labelStyle(.iconOnly)
+                    }
+                    .tint(Color(red: 0.16, green: 0.14, blue: 0.12))
+                }
+            }
+        }
         .onAppear {
             isNameFocused = pageIndex == 1
         }
