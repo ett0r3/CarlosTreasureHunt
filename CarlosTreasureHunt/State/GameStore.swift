@@ -217,6 +217,10 @@ final class GameStore: ObservableObject {
         finishRewardSequence(for: artwork)
     }
 
+    func continueAfterDetailFound(for artwork: ArtworkTarget) {
+        path = [.artworkReveal(artwork.id)]
+    }
+
     func continueAfterArtworkReveal(for artwork: ArtworkTarget) {
         path = [.wordReveal(artwork.id)]
     }
@@ -345,7 +349,7 @@ final class GameStore: ObservableObject {
         }
 
         progressByMissionID[mission.id] = progress
-        path = [.artworkReveal(artwork.id)]
+        path = [.detailFound(artwork.id)]
     }
 
     func returnHome() {

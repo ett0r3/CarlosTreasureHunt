@@ -14,9 +14,9 @@ struct OnboardingView: View {
         [
             IntroPage(
                 assetName: "carlo-intro1",
-                text: "Hello! I am Carlo Di Borbone.\nWelcome to\nMuseo di Capodimonte.\nWhat's your name?",
+                text: "Hello! I am Carlo Di Borbone.\nWelcome to Museo di Capodimonte.\nWhat's your name?",
                 boldPhrases: ["Carlo Di Borbone"],
-                textFrame: CGRect(x: 0.22, y: 0.09, width: 0.56, height: 0.22),
+                textFrame: CGRect(x: 0.22, y: 0.085, width: 0.56, height: 0.22),
                 fontSize: 20
             ),
             IntroPage(
@@ -34,14 +34,14 @@ struct OnboardingView: View {
                     "important messages",
                     game.displayName
                 ],
-                textFrame: CGRect(x: 0.22, y: 0.09, width: 0.56, height: 0.22),
+                textFrame: CGRect(x: 0.22, y: 0.08, width: 0.56, height: 0.22),
                 fontSize: 20
             ),
             IntroPage(
                 assetName: "carlo-intro3",
                 text: "To find them, you'll need to look carefully at the paintings and scan the hidden details you discover along the way...",
                 boldPhrases: ["scan the hidden details"],
-                textFrame: CGRect(x: 0.22, y: 0.09, width: 0.56, height: 0.22),
+                textFrame: CGRect(x: 0.22, y: 0.095, width: 0.56, height: 0.22),
                 fontSize: 20
             ),
             IntroPage(
@@ -55,7 +55,7 @@ struct OnboardingView: View {
                 assetName: "carlo-intro5",
                 text: "So, \(game.displayName),\nlet me show you\nhow it works...",
                 boldPhrases: [game.displayName],
-                textFrame: CGRect(x: 0.22, y: 0.10, width: 0.56, height: 0.22),
+                textFrame: CGRect(x: 0.22, y: 0.09, width: 0.56, height: 0.22),
                 fontSize: 20
             )
         ]

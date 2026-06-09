@@ -95,7 +95,7 @@ struct MissionDetailView: View {
                     GalleryHeader(
                         title: mission.title,
                         subtitle: game.discoveredPhraseText(for: mission),
-                        showsBackButton: true
+                        showsBackButton: !isGalleryMode
                     ) {
                         dismiss()
                     }
@@ -154,7 +154,9 @@ struct MissionDetailView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .navigationBar)
+        .toolbar(isGalleryMode ? .visible : .hidden, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .tint(.white)
     }
 }
 

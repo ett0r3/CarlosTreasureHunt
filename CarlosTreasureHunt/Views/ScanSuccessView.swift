@@ -5,6 +5,132 @@
 
 import SwiftUI
 
+struct DetailFoundView: View {
+    @EnvironmentObject private var game: GameStore
+    let artworkID: UUID
+
+    var body: some View {
+        ZStack {
+            if
+                let artwork = game.artwork(with: artworkID),
+                game.isUnlocked(artwork)
+            {
+                GeometryReader { proxy in
+                    let compact = proxy.size.height < 760
+                    let lensDiameter = min(proxy.size.width * 1.42, proxy.size.height * 0.76)
+                    let lensCenterY = proxy.size.height * 0.47
+
+                    ZStack {
+                        detailImage(for: artwork)
+                            .scaledToFill()
+                            .frame(width: proxy.size.width, height: proxy.size.height)
+                            .clipped()
+
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.24, green: 0.15, blue: 0.64).opacity(0.78),
+                                Color(red: 0.12, green: 0.18, blue: 0.50).opacity(0.72),
+                                Color(red: 0.38, green: 0.22, blue: 0.72).opacity(0.80)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+
+                        Circle()
+                            .stroke(
+                                Color(red: 0.72, green: 0.63, blue: 0.87).opacity(0.42),
+                                lineWidth: compact ? 38 : 46
+                            )
+                            .frame(width: lensDiameter, height: lensDiameter)
+                            .position(x: proxy.size.width / 2, y: lensCenterY)
+
+                        Capsule()
+                            .fill(Color(red: 0.72, green: 0.63, blue: 0.87).opacity(0.42))
+                            .frame(width: compact ? 48 : 58, height: proxy.size.height * 0.28)
+                            .rotationEffect(.degrees(32))
+                            .position(
+                                x: proxy.size.width * 0.12,
+                                y: lensCenterY + lensDiameter * 0.50
+                            )
+
+                        VStack(spacing: compact ? 22 : 30) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: compact ? 150 : 185, weight: .black))
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(
+                                    Color(red: 0.20, green: 0.17, blue: 0.38),
+                                    GameTheme.goldGradient
+                                )
+                                .shadow(color: GameTheme.gold.opacity(0.22), radius: 22, y: 10)
+
+                            Text("Detail Found!")
+                                .font(.system(
+                                    size: compact ? 42 : 50,
+                                    weight: .black,
+                                    design: .rounded
+                                ))
+                                .foregroundStyle(.white)
+                                .minimumScaleFactor(0.72)
+                                .lineLimit(1)
+                        }
+                        .position(
+                            x: proxy.size.width / 2,
+                            y: proxy.size.height * (compact ? 0.46 : 0.45)
+                        )
+
+                        detailImage(for: artwork)
+                            .scaledToFill()
+                            .frame(width: compact ? 96 : 112, height: compact ? 96 : 112)
+                            .clipShape(Circle())
+                            .overlay {
+                                Circle()
+                                    .stroke(
+                                        Color(red: 0.55, green: 0.42, blue: 0.84).opacity(0.72),
+                                        lineWidth: 6
+                                    )
+                            }
+                            .position(
+                                x: proxy.size.width / 2,
+                                y: min(
+                                    proxy.size.height * 0.79,
+                                    lensCenterY + lensDiameter * 0.48
+                                )
+                            )
+
+                        VStack {
+                            Spacer()
+
+                            GoldCircleButton(
+                                systemImage: "chevron.right",
+                                accessibilityLabel: "Continue"
+                            ) {
+                                game.continueAfterDetailFound(for: artwork)
+                            }
+                            .padding(.bottom, compact ? 14 : 24)
+                        }
+                    }
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                }
+            } else {
+                ContentUnavailableView("Detail not found", systemImage: "questionmark.circle")
+            }
+        }
+        .background(GameTheme.deepPurple)
+        .ignoresSafeArea()
+        .navigationBarBackButtonHidden()
+    }
+
+    @ViewBuilder
+    private func detailImage(for artwork: ArtworkTarget) -> some View {
+        if let targetAssetName = artwork.targetAssetName {
+            Image(targetAssetName)
+                .resizable()
+        } else {
+            Color(red: 0.18, green: 0.16, blue: 0.38)
+        }
+    }
+}
+
 struct WordRevealView: View {
     @EnvironmentObject private var game: GameStore
     let artworkID: UUID
@@ -98,30 +224,13 @@ struct ArtworkRevealView: View {
                 GeometryReader { proxy in
                     let compact = proxy.size.height < 760
                     let imageHeight = min(
-                        proxy.size.height * (compact ? 0.34 : 0.40),
-                        compact ? 255 : 360
+                        proxy.size.height * (compact ? 0.25 : 0.31),
+                        compact ? 190 : 270
                     )
+                    let buttonAreaHeight: CGFloat = compact ? 82 : 96
 
-                    ZStack {
-                        Button {
-                            showsFullScreenArtwork = true
-                        } label: {
-                            FullArtworkImage(artwork: artwork)
-                                .scaledToFit()
-                                .frame(
-                                    maxWidth: min(proxy.size.width - 48, 340),
-                                    maxHeight: imageHeight
-                                )
-                                .shadow(color: .black.opacity(0.24), radius: 20, y: 12)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("View \(artwork.title) full screen")
-                        .position(
-                            x: proxy.size.width / 2,
-                            y: proxy.size.height / 2
-                        )
-
-                        VStack(spacing: 0) {
+                    VStack(spacing: 0) {
+                        VStack(spacing: compact ? 8 : 12) {
                             Text(artwork.title)
                                 .font(.system(
                                     size: compact ? 21 : 24,
@@ -132,7 +241,6 @@ struct ArtworkRevealView: View {
                                 .foregroundStyle(.white)
                                 .lineLimit(3)
                                 .minimumScaleFactor(0.7)
-                                .padding(.top, compact ? 16 : 28)
                                 .padding(.horizontal, 24)
 
                             Text("by \(artwork.artist)")
@@ -144,27 +252,43 @@ struct ArtworkRevealView: View {
                                 .foregroundStyle(.white)
                                 .lineLimit(2)
                                 .minimumScaleFactor(0.75)
-                                .padding(.top, compact ? 7 : 10)
                                 .padding(.horizontal, 24)
 
-                            Spacer()
+                            Button {
+                                showsFullScreenArtwork = true
+                            } label: {
+                                FullArtworkImage(artwork: artwork)
+                                    .scaledToFit()
+                                    .frame(
+                                        maxWidth: min(proxy.size.width - 48, 340),
+                                        maxHeight: imageHeight
+                                    )
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                    .shadow(color: .black.opacity(0.24), radius: 20, y: 12)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel("View \(artwork.title) full screen")
 
                             RewardCarloBubble(
                                 boldLead: "Fun fact:",
                                 message: artwork.artworkDescription
                             )
                             .padding(.horizontal, compact ? 16 : 22)
-                            .padding(.bottom, compact ? 10 : 16)
-
-                            RewardNextButton {
-                                if continuesToWordReveal {
-                                    game.continueAfterArtworkReveal(for: artwork)
-                                } else {
-                                    game.finishReopenedArtwork(for: artwork)
-                                }
-                            }
-                            .padding(.bottom, compact ? 12 : 22)
                         }
+                        .frame(
+                            maxWidth: .infinity,
+                            maxHeight: .infinity,
+                            alignment: .center
+                        )
+
+                        RewardNextButton {
+                            if continuesToWordReveal {
+                                game.continueAfterArtworkReveal(for: artwork)
+                            } else {
+                                game.finishReopenedArtwork(for: artwork)
+                            }
+                        }
+                        .frame(height: buttonAreaHeight)
                     }
                     .frame(width: proxy.size.width, height: proxy.size.height)
                 }
@@ -499,6 +623,12 @@ struct FullArtworkImage: View {
 struct ScanSuccessView_Previews: PreviewProvider {
     static var previews: some View {
         Group {
+            NavigationStack {
+                DetailFoundView(artworkID: PreviewSupport.firstArtwork.id)
+            }
+            .environmentObject(PreviewSupport.inProgressGame)
+            .previewDisplayName("Detail Found")
+
             NavigationStack {
                 WordRevealView(artworkID: PreviewSupport.firstArtwork.id)
             }

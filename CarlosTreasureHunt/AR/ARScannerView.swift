@@ -852,8 +852,6 @@ private struct ScannerHintOverlay: View {
             ZStack {
                 Color(red: 1.0, green: 0.68, blue: 0.02)
                     .opacity(0.78)
-                    .contentShape(Rectangle())
-                    .onTapGesture {}
 
                 VStack(spacing: -42) {
                     ScannerHintButton(
@@ -885,6 +883,8 @@ private struct ScannerHintOverlay: View {
                 .frame(width: min(proxy.size.width - 48, 340))
                 .position(x: proxy.size.width / 2, y: proxy.size.height * 0.51)
             }
+            .contentShape(Rectangle())
+            .onTapGesture(perform: dismissAction)
         }
         .accessibilityElement(children: .contain)
     }
@@ -922,15 +922,13 @@ private struct MagicalRecognitionRing: View {
                 ZStack {
                     Circle()
                         .stroke(
-                            isRecognizingTarget
-                                ? Color(red: 0.15, green: 0.86, blue: 0.42).opacity(0.72)
-                                : Color(red: 0.48, green: 0.12, blue: 0.72).opacity(0.72 + pulse * 0.22),
+                            Color(red: 1.0, green: 0.72, blue: 0.0)
+                                .opacity(0.24 + pulse * 0.08),
                             lineWidth: lineWidth
                         )
                         .shadow(
-                            color: isRecognizingTarget
-                                ? Color(red: 0.05, green: 0.82, blue: 0.39).opacity(0.55)
-                                : Color(red: 0.56, green: 0.20, blue: 0.82).opacity(0.50),
+                            color: Color(red: 0.94, green: 0.58, blue: 0.0)
+                                .opacity(0.22),
                             radius: 5 + pulse * 3
                         )
 
@@ -953,7 +951,7 @@ private struct MagicalRecognitionRing: View {
                             color: Color(red: 0.05, green: 0.82, blue: 0.39).opacity(0.9),
                             radius: 8
                         )
-                        .opacity(isRecognizingTarget ? 1 : 0.24)
+                        .opacity(isRecognizingTarget ? 1 : 0)
                         .animation(.linear(duration: 0.08), value: clampedProgress)
 
                     if clampedProgress > 0 && isRecognizingTarget {
@@ -996,7 +994,11 @@ private struct RecognitionStatusBadge: View {
     private var statusColor: Color {
         isRecognizingTarget
             ? Color(red: 0.06, green: 0.72, blue: 0.34)
-            : Color(red: 0.96, green: 0.39, blue: 0.02)
+            : Color(red: 1.0, green: 0.74, blue: 0.0)
+    }
+
+    private var foregroundColor: Color {
+        isRecognizingTarget ? .white : .black
     }
 
     var body: some View {
@@ -1005,7 +1007,7 @@ private struct RecognitionStatusBadge: View {
             systemImage: isRecognizingTarget ? "checkmark.circle.fill" : "viewfinder"
         )
         .font(.system(size: 14, weight: .black, design: .rounded))
-        .foregroundStyle(.white)
+        .foregroundStyle(foregroundColor)
         .padding(.horizontal, 14)
         .frame(height: 38)
         .background(

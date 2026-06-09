@@ -13,6 +13,7 @@ enum GameRoute: Hashable {
     case galleryArtwork(UUID)
     case target(UUID)
     case scanner(UUID)
+    case detailFound(UUID)
     case wordReveal(UUID)
     case artworkReveal(UUID)
     case reopenedArtwork(UUID)

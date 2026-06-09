@@ -32,6 +32,8 @@ struct ContentView: View {
                             artworkID: artworkID,
                             showsTutorial: game.shouldShowScannerTutorial
                         )
+                    case .detailFound(let artworkID):
+                        DetailFoundView(artworkID: artworkID)
                     case .wordReveal(let artworkID):
                         WordRevealView(artworkID: artworkID)
                     case .artworkReveal(let artworkID):
